@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.01
+// @version      0.0.02
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -10,16 +10,16 @@
 // ==/UserScript==
 
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
-const mainBody = window.parent.document.body, thisPageName = window.location.pathname, contentBox = mainBody.querySelector('#contentBox')
+const mainBody = window.parent.document.body, thisPageName = window.location.pathname.replaceAll("%20", ""), contentBox = mainBody.querySelector('#contentBox')
 const page = new Map([
-    ['/CWRF/Home.aspx', { alias: 'Home', tableLoc: document.querySelector('div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)'), tableTbods() {} }],
-    ['/CWRF/Case%20File.aspx', { alias: 'CaseFile', tableLoc: document.querySelector('#DPC table table.ms-listviewtable'), tableTbods() { Array.from(page.tableLoc.children).filter(ele => (ele.id.slice(0,4) === "tbod" && ele.getAttribute('isloaded') === "true")) } }],
-    ['/CWRF/Document%20Discovery.aspx', 'DocDisc'],
-    ['/CWRF/Working%20Documents.aspx', 'WorkDocs'],
-    ['/_layouts/15/NCT.Scan/Scan.aspx', 'DocProps']
-]).get(thisPageName)
+    ['/CWRF/Home.aspx', { alias: 'Home', tableLoc: document.querySelector('div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)') }],
+    ['/CWRF/CaseFile.aspx', { alias: 'CaseFile', tableLoc: document.querySelector('#DPC table table.ms-listviewtable') }],
+    ['/CWRF/DocumentDiscovery.aspx', { alias: 'DocDisc' }],
+    ['/CWRF/WorkingDocuments.aspx', { alias: 'WorkDocs' }],
+    ['/_layouts/15/NCT.Scan/Scan.aspx', { alias: 'DocProps' }]
+]).get(thisPageName) ?? {}
 
-let tbodLoadedEles = () => Array.from(page.tableLoc.querySelectorAll('tbody[id^=tbod]')).filter(ele => ele.getAttribute('isloaded') === "true");
+let tbodLoadedEles = () => Array.from(page.tableLoc?.querySelectorAll('tbody[id^=tbod]')).filter(ele => ele.getAttribute('isloaded') === "true");
 class TrackedMutationObserver extends MutationObserver { // https://stackoverflow.com/questions/63488834/how-to-get-all-active-mutation-observers-on-page //
     static instances = []
     constructor(...args) { super(...args); };
@@ -83,8 +83,8 @@ async function removeNotificationFromNames(tableEle) {
     });
 };
 !function removeNotificationsAsLoaded() {
-    if (!page.tableLoc) { return };
-    tbodLoadedEles().forEach(tbod => { removeNotificationFromNames(tbod) })
+    if (!'tableLoc' in page || !page.tableLoc) { return };
+    tbodLoadedEles()?.forEach(tbod => { removeNotificationFromNames(tbod) })
     const observer = new TrackedMutationObserver(mutations => {
         tbodLoadedEles().forEach(tbod => { removeNotificationFromNames(tbod) })
     });
