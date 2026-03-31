@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.02
+// @version      0.0.03
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -10,16 +10,26 @@
 // ==/UserScript==
 
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
-const mainBody = window.parent.document.body, thisPageName = window.location.pathname.replaceAll("%20", ""), contentBox = mainBody.querySelector('#contentBox')
+const mainBody = window.parent.document.body, thisPageName = window.location.pathname.replaceAll("%20", "")
 const page = new Map([
-    ['/CWRF/Home.aspx', { alias: 'Home', tableLoc: document.querySelector('div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)') }],
-    ['/CWRF/CaseFile.aspx', { alias: 'CaseFile', tableLoc: document.querySelector('#DPC table table.ms-listviewtable') }],
-    ['/CWRF/DocumentDiscovery.aspx', { alias: 'DocDisc' }],
+    ['/CWRF/Home.aspx', { alias: 'Home', tableLoc: mainBody.querySelector('div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)') }],
+    ['/CWRF/CaseFile.aspx', { alias: 'CaseFile', tableLoc: mainBody.querySelector('#DPC table table.ms-listviewtable') }],
+    ['/CWRF/DocumentDiscovery.aspx', { alias: 'DocDisc', tableLoc: mainBody.querySelector('table[summary="Document Processing Center"]') }],
     ['/CWRF/WorkingDocuments.aspx', { alias: 'WorkDocs' }],
     ['/_layouts/15/NCT.Scan/Scan.aspx', { alias: 'DocProps' }]
 ]).get(thisPageName) ?? {}
+mainBody.classList.add(page.alias)
+const modifiedTables = [];
+const titleSwaps = [
+    ["Notification - ", ""],
+    ["(Minnesota )?Child Care Assistance( Program)?", "CCAP"],
+    // [],
+    // [],
+    // [],
+    // [],
+];
 
-let tbodLoadedEles = () => Array.from(page.tableLoc?.querySelectorAll('tbody[id^=tbod]')).filter(ele => ele.getAttribute('isloaded') === "true");
+let tbodLoadedEles = () => ["DocDisc"].includes(page.alias) ? [ page.tableLoc.querySelector('tbody') ] : Array.from(page.tableLoc?.querySelectorAll('tbody[id^=tbod]')).filter(ele => ele.getAttribute('isloaded') === "true")
 class TrackedMutationObserver extends MutationObserver { // https://stackoverflow.com/questions/63488834/how-to-get-all-active-mutation-observers-on-page //
     static instances = []
     constructor(...args) { super(...args); };
@@ -37,16 +47,17 @@ class TrackedMutationObserver extends MutationObserver { // https://stackoverflo
 !function addCustomNavElements() {
     if (!mainBody.querySelector('#RibbonContainer')) { return };
     let navContainer = mainBody.insertAdjacentElement( 'afterbegin', createNewEle('div', { id: "caseWonksNavBar", style: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 999;", }) )
-    !function mainPageLink() { navContainer.appendChild( createNewEle('a', { textContent: "Main Page", classList: "ms-pivotControl-surfacedOpt-selected", style: "font-size: 14px;", onclick: ()=>{ window.open("https://fsestlouis.caseworkscloud.com/", "_self") } }) ) }();
+    !function mainPageLink() { navContainer.appendChild( createNewEle('a', { textContent: "Home Page", classList: "ms-pivotControl-surfacedOpt-selected", style: "font-size: 14px;", onclick: ()=>{ window.open("https://fsestlouis.caseworkscloud.com/", "_self") } }) ) }();
     !function addNewTabField() {
-        let caseDocsNewTabField = navContainer.appendChild( createNewEle('input', { id: "newTabField", autocomplete:"off", classList: "form-control", placeholder: "Case #", pattern: "^\\d{1,8}$", style: "width: 15ch; line-height: inherit; padding: 0 5px", }) );
-        caseDocsNewTabField.addEventListener('keydown', keydownEvent => {
-            if (keydownEvent.key !== "Enter") { return };
-            navToCaseDocs(keydownEvent.target.value)
-            keydownEvent.target.value = ""
-        });
-        function navToCaseDocs(caseNumber) {
-            window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + caseNumber + "&SOR=MAXIS", "_blank")
+        let caseDocsNewTabField = createNewEle('input', { id: "newTabField", autocomplete:"off", classList: "form-control", placeholder: "Case #", pattern: "^\\d{1,10}$", style: "width: 15ch; line-height: inherit; padding: 0 5px", })
+        let caseDocsNewTabButton = createNewEle('button', { textContent: "GO", style: "line-height: inherit; padding: 0 8px; margin-left: -10px; min-width: unset; font-size: 10px", })
+        navContainer.append(caseDocsNewTabField, caseDocsNewTabButton)
+        caseDocsNewTabField.addEventListener('keydown', keydownEvent => { keydownEvent.key === "Enter" && navToCaseDocs() });
+        caseDocsNewTabButton.addEventListener('click', navToCaseDocs);
+        function navToCaseDocs() {
+            if (!caseDocsNewTabField.value || !(/^\d{1,10}/).test(caseDocsNewTabField.value)) { return };
+            window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + caseDocsNewTabField.value + "&SOR=MAXIS", "_blank")
+            caseDocsNewTabField.value = ""
         };
     }();
     !function buttonsToForceNotif() {
@@ -63,31 +74,40 @@ class TrackedMutationObserver extends MutationObserver { // https://stackoverflo
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 // if (pageAlias === "Home") { change JS link to html link }
-const modifiedTables = []
 async function removeNotificationFromNames(tableEle) {
     if ( modifiedTables.includes(tableEle) ) { return };
     tableEle = await waitForTableCells(tableEle)
+    let title, name, uselessMenu, firstName, lastName, shortNote, caseLink, caseWorker
     Array.from(tableEle.querySelectorAll('tr'), (tr) => {
-        let [,,, title, name,,,,, link ] = tr.children
-        if (title.textContent.indexOf("Notif") === 0) {
-            let newText = title.textContent.slice(15)
-            title.textContent = newText
-            name.querySelector('a').textContent = "view_item"
-            // name.querySelector('a').textContent = newText
-            if (page.alias === "Home") {
-                link.children[0].href = "/CWRF/Case%20File.aspx?SystemRecordID=" + link.children[0].textContent + "&SOR=MAXIS"
-                link.children[0].target = "_blank"
-            }
+        if (["Home", "CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, caseLink ] = tr.children };
+        if (["DocDisc"].includes(page.alias)) { [,, title, name, firstName, lastName, caseWorker, shortNote, caseLink ] = tr.children };
+
+        if (["DocDisc"].includes(page.alias)) {
+            if (name.textContent.indexOf("Notif") === 0) { tr.remove(); return; }
         };
+        if (caseLink?.children?.length) {
+            let newLink = createNewEle('a', { textContent: caseLink.textContent, href: "#" })
+            caseLink.replaceChildren(newLink)
+            newLink.addEventListener('click', () => openCaseInNewTab(newLink.textContent, "_self"));
+            newLink.addEventListener('contextmenu', contextmenuEvent => {
+                if (contextmenuEvent.target !== newLink) { return };
+                contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
+                openCaseInNewTab(newLink.textContent, "_blank")
+            });
+        };
+        name.querySelector('a').textContent = "(view_item)"
+        titleSwaps.forEach( ([regX, swap]) => { title.textContent = title.textContent.replace(new RegExp(regX, "i"), swap) })
         modifiedTables.push(tableEle)
     });
+};
+function openCaseInNewTab(caseNumNewTab, target) {
+    navigator.clipboard.writeText(caseNumNewTab)
+    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + caseNumNewTab + "&SOR=MAXIS#DPC", target)
 };
 !function removeNotificationsAsLoaded() {
     if (!'tableLoc' in page || !page.tableLoc) { return };
     tbodLoadedEles()?.forEach(tbod => { removeNotificationFromNames(tbod) })
-    const observer = new TrackedMutationObserver(mutations => {
-        tbodLoadedEles().forEach(tbod => { removeNotificationFromNames(tbod) })
-    });
+    const observer = new TrackedMutationObserver(mutations => { tbodLoadedEles()?.forEach(tbod => { removeNotificationFromNames(tbod) }) });
     observer.observe(page.tableLoc, { childList: true, subtree: true })
 }();
 // removeNotificationsAsLoaded(false);
@@ -123,7 +143,7 @@ async function waitForTableCells(awaitedTable) {
 //         else {
 //             const observer = new MutationObserver(mutations => { if (awaitedTable) {
 //                 observer.disconnect(); resolve( awaitedTable ); } });
-//             observer.observe(contentBox, { childList: true, subtree: true, });
+//             observer.observe(mainBody.querySelector('#contentBox'), { childList: true, subtree: true, });
 //         };
 //     });
 // };
