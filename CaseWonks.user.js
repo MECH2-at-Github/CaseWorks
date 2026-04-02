@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.04
+// @version      0.0.05
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -28,11 +28,17 @@ const page = new Map([
 mainBody.classList.add(page.alias, 'CaseWonks')
 const modifiedTables = [];
 const titleSwaps = [ // escapes need double slash //
+    ["Notification - Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mailing (Delete)"],
     ["Notification - ", ""],
-    ["DHS3550 Minnesota Child Care Assistance Program Application", "CCAP Application"],
-    ["(Minnesota )?Child Care Assistance( Program)?", "CCAP"],
-    ["DHS5223 Combined Application Form \\(CAF\\)", "Combined Application"],
-    // ["", ""],
+    ["^FSE[0-9]{1,3}[A-Z]? ", ""],
+    ["^EA[0-9]{1,3}[A-Z]? ", ""],
+    ["^DHS[0-9]{1,6}[A-Z]? ", ""],
+    ["^SLF[0-9]{1,3} ", ""],
+    ["^D[0-9]{3} ", ""],
+    ["(Minnesota )?Child Care Assistance( Program)?( \\(CCAP\\))?", "CCAP"],
+    ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
+    ["Combined Application Form \\(CAF\\)", "Combined Application"],
+    ["Other Residence", "Residence"],
     // ["", ""],
     // ["", ""],
 ];
@@ -96,7 +102,8 @@ let tbodLoadedEles = () => page.singleTable ? [ page.tableLoc.querySelector('tbo
         uniques.add(item);
         return false;
     });
-    document.getElementById('caseWonksNavBar').append( createNewEle('div', { textContent: "Duplicates: " + duplicates.join(', ') }), createNewEle('div', { textContent: "Unique case count: " + uniques.size }) )
+    if (duplicates.length === 0) { duplicates = ["None found"] }
+    document.getElementById('caseWonksNavBar').append( createNewEle('div', { textContent: "Duplicate Case Numbers: " + duplicates.join(', ') }), createNewEle('div', { textContent: "Unique case count: " + uniques.size }) )
 }();
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
