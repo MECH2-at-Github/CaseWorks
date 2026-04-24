@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.06
+// @version      0.0.07
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -13,6 +13,66 @@ console.time('CaseWonks load time')
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
 const mainBody = window.parent.document.body, thisPageName = window.location.pathname.split("/")?.reverse()[0].replaceAll("%20", ""), editionLocation = document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.toLowerCase().replace(/\W/g, '') ?? "fsestlouis",
       ribbon = document.getElementById('RibbonContainer')
+
+const sanitize = {
+    evalText(text) { return String(text)?.replace(/\\/g,'').trim() },
+    query(query, all = 0) {
+        if (!query) { return undefined }
+        if (query instanceof HTMLElement || query instanceof NodeList || query instanceof HTMLCollection ) { return query }
+        if (typeof query !== "string") { console.log("sanitize.query: argument 1 invalid (" + query + ") - must be a valid query string, an HTMLElement or HTMLCollection, or a NodeList"); return undefined; }
+        return getSanitizedQuery(query)
+        function getSanitizedQuery(queryInput) {
+            let queryFromTextInput = ( queryInput.indexOf(',') > -1 || all ) ? document.querySelectorAll( queryInput )
+            : queryInput.indexOf('#') === 0 ? document.getElementById( queryInput.slice(1) )
+            : document.querySelector( queryInput )
+            return ( queryFromTextInput instanceof HTMLElement || queryFromTextInput instanceof NodeList ) ? queryFromTextInput : undefined
+        };
+    },
+    string(stringText) { return String(stringText)?.replace(/[^a-z0-9áéíóúñü \.,'_-]/gim, '') },
+    number(num) { return Number(String(num).replace(/[^0-9-.]/gi, '')) || 0 },
+    html(htmlText) { return new DOMParser().parseFromString(htmlText, "text/html").documentElement.innerText },
+    timeStamp(time) { return String(time)?.replace(/[^apm0-9:,\/ ]/gi, '') }, // [^] = not in list //
+    date(inputDate, dateTypeNeeded = "date") {
+        const isDateObject = inputDate instanceof Date
+        inputDate = (/\d{13}/).test(inputDate) ? Number(inputDate) : inputDate
+        const inputTypeof = typeof inputDate
+        switch (dateTypeNeeded) {
+            case "date":
+                return isDateObject ? inputDate : new Date(inputDate)
+                break
+            case "number":
+                if ( inputTypeof === "number" && (Math.log(inputDate) * Math.LOG10E + 1 | 0) === 13 ) { return inputDate }
+                if ( inputTypeof === "string" ) { return Date.parse(inputDate) }
+                if ( isDateObject ) { return inputDate.getTime() }
+                break
+            case "string":
+                if ( inputTypeof === "number" && (Math.log(inputDate) * Math.LOG10E + 1 | 0) === 13 ) { return new Date(inputDate).toLocaleDateString() }
+                if ( inputTypeof === "string" ) { return inputDate }
+                if ( isDateObject ) { return inputDate.toLocaleDateString() }
+                break
+            default:
+                return undefined;
+        }
+    },
+    json(jsonObj) { try { if (!jsonObj || jsonObj.indexOf('{') < 0) { return undefined }; return JSON.parse(jsonObj) } catch (err) { console.log(err, jsonObj); return undefined } },
+};
+const dateFuncs = {
+    formatDate(dateVal, dateFormat = "mmddyy") {
+        dateVal = sanitize.date(dateVal, 'date')
+        if ( [-86400000, -64800000 ].includes(dateVal) || Number.isNaN(dateVal) ) { return undefined }; // -64800000 === 12/31/1969, epoch date (-86400000 UTC epoch) //
+        dateFormat = dateFormat.toLowerCase()
+        switch (dateFormat) {
+            case "inputelement": return dateVal.toLocaleDateString('en-CA');
+            case "utc": return Date.UTC(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDay());
+            case "mdyy": return dateVal.toLocaleDateString(undefined, { year: "2-digit", month: "numeric", day: "numeric" });
+            case "mdyyyy": return dateVal.toLocaleDateString(undefined, { year: "numeric", month: "numeric", day: "numeric" });
+            case "mmddyy": return dateVal.toLocaleDateString(undefined, { year: "2-digit", month: "2-digit", day: "2-digit" });
+            case "mmddyyyy": return dateVal.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+            case "mmddhm": return dateVal.toLocaleDateString('en-US', { hour: "numeric", minute: "2-digit", month: "2-digit", day: "2-digit" });
+            default: return dateVal.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+        }
+    },
+};
 const page = new Map([
     ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
     ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', secondaryTableLoc: '#scriptWPQ7' }],
@@ -32,8 +92,8 @@ const tableLocQuery = (loc) => mainBody.querySelector(page[loc])
 mainBody.classList.add(page.alias, 'CaseWonks')
 const modifiedTables = [];
 const titleSwaps = [ // escapes need double slash //
-    ["Notification - Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail (Delete)"],
     ["Notification - ", ""],
+    ["Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail - Delete"],
     ["^FSE[0-9]{1,3}[A-Z]? ", ""],
     ["^EA[0-9]{1,3}[A-Z]? ", ""],
     ["^DHS[0-9]{1,6}[A-Z]? ", ""],
@@ -43,6 +103,7 @@ const titleSwaps = [ // escapes need double slash //
     ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
     ["Redetermination Form", "Redetermination"],
     ["Combined Application Form \\(CAF\\)", "Combined Application"],
+    ["Shelter\\/Residence Verification", "Residence"],
     ["Other Residence", "Residence"],
     ["Minnesota Family Investment Program \\(MFIP\\)", "MFIP"],
     ["MFIP\\/DWP Employment Services Child Care Request", "ES to CCAP 7054"],
@@ -69,8 +130,12 @@ const taxonomySwaps = new Map([
     ["1.7", "1.7: Residency"],
     ["1.8", "1.8: IM Comm"],
     ["1.81", "1.81: CS"],
+    ["1.9", "1.9: IM Ins-Corr"],
     ["5.3", "5.3: CCAP App"],
     ["5.4", "5.4: CCAP Activity"],
+    // ["", ""],
+    // ["", ""],
+    // ["", ""],
     // ["", ""],
     // ["", ""],
 ]);
@@ -91,7 +156,24 @@ const theadSwaps = new Map([
     // ["", ""],
     // ["", ""],
 ])
-
+const gbl = {
+    eles: {
+        newTabField: createNewEle('input', { id: "newTabField", autocomplete:"off", classList: "form-control", placeholder: "Case #", pattern: "^\\d{1,8}$", style: "width: 10ch;" }),
+        navContainer: createNewEle('div', { id: "caseWonksNavBar", style: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 990;", }),
+        homePageLink: createNewEle('a', { textContent: "Home Page", classList: "ms-pivotControl-surfacedOpt-selected", style: "font-size: 14px;", }),
+    }
+};
+const caseData = (() => {
+    let caseIdNameEle = mainBody.querySelector('#CaseFileHeaderStatus')?.previousElementSibling;
+    if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
+    let splitCaseData = caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'-, ]+)/i).groups
+    if (!editionLocation.includes("cse")) { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
+    let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
+    caseNumEle.addEventListener('click', clickEvent => snackBar('Copied ' + clickEvent.target.textContent, 'notitle') )
+    caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
+    caseIdNameEle.replaceWith( caseIdNameEleReplacement )
+    return { caseNum: splitCaseData.caseNum, caseName: splitCaseData.caseName };
+})();
 !function addCustomTableRules() {
     return;
     const tableRules = {
@@ -101,7 +183,7 @@ const theadSwaps = new Map([
         ["CaseFile", 'table[summary="Document Processing Center"] {} table[summary="FSE Electronic File Cabinet"] {}']
     ]).get(page.alias);
     if (!customTableRules) { return };
-    document.head.append(createNewEle( 'style', { type: 'text/css', textContent: customTableRules } ))
+    document.head.append(createNewEle( 'style', { id: "caseWonksTableRules", textContent: customTableRules } ))
 }();
 function tbodLoadedEles() {
     let tbodArray = page.singleTable ? [ tableLocQuery('primaryTableLoc').querySelector('tbody') ]
@@ -114,59 +196,182 @@ function tbodLoadedElesSecondary() {
 	let secondaryTablesArea = tableLocQuery('secondaryTableLoc')
     return Array.from(secondaryTablesArea?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
 };
-
-!function addCustomNavElements() {
-    if (!mainBody.querySelector('#RibbonContainer')) { return };
-    let navContainer = mainBody.insertAdjacentElement( 'afterbegin', createNewEle('div', { id: "caseWonksNavBar", style: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 999;", }) )
+function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (/(?:^\d{1,8}$|^\d{12}$)/).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
+function navToCaseFileNTF() {
+    let caseFileNumber = testCaseNum(gbl.eles.newTabField.value)
+    if (!caseFileNumber) { return undefined };
+    openCaseFile(caseFileNumber, "_blank")
+    gbl.eles.newTabField.value = ""
+    return caseFileNumber
+};
+!function addCustomNavBar() {
+    if (!ribbon) { return };
+    mainBody.insertAdjacentElement( 'afterbegin', gbl.eles.navContainer )
     !function mainPageLink() {
-        // let homePageLink = navContainer.appendChild( createNewEle('a', { textContent: "Home Page", classList: "ms-pivotControl-surfacedOpt-selected", style: "font-size: 14px;", onclick: ()=>{ window.open("https://fsestlouis.caseworkscloud.com/", "_self") } }) )
-        let homePageLink = navContainer.appendChild( createNewEle('a', { textContent: "Home Page", classList: "ms-pivotControl-surfacedOpt-selected", style: "font-size: 14px;", }) )
-        homePageLink.addEventListener('click', () => { window.open("https://" + editionLocation + ".caseworkscloud.com/", "_self") });
-        homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionLocation + ".caseworkscloud.com/", "_blank"); });
+        gbl.eles.navContainer.appendChild( gbl.eles.homePageLink )
+        gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionLocation + ".caseworkscloud.com/", "_self") });
+        gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionLocation + ".caseworkscloud.com/", "_blank"); });
     }();
-    !function addNewTabField() {
-        let caseDocsNewTabField = createNewEle('input', { id: "newTabField", autocomplete:"off", classList: "form-control", placeholder: "Case #", pattern: "^\\d{1,10}$", style: "width: 15ch; line-height: inherit; padding: 0 5px", })
-        let caseDocsNewTabButton = createNewEle('button', { textContent: "GO", style: "line-height: inherit; padding: 0 8px; margin-left: -10px; min-width: unset; font-size: 10px", })
-        navContainer.append(caseDocsNewTabField, caseDocsNewTabButton)
-        caseDocsNewTabField.addEventListener('keydown', keydownEvent => { keydownEvent.key === "Enter" && navToCaseDocs() });
-        caseDocsNewTabButton.addEventListener('click', navToCaseDocs);
-        function navToCaseDocs() {
-            if (!caseDocsNewTabField.value || !(/^\d{1,10}/).test(caseDocsNewTabField.value.trim())) { return };
-            openCaseFile(caseDocsNewTabField.value, "_blank")
-            caseDocsNewTabField.value = ""
+    // Link to "All Docs" in Nav Bar? (would need to store the username from the Home Page)
+    // 	document.querySelector('span[title="My DocBox - Document Processing Center library"] a[title="All Documents - Document Processing Center"]').href.split('/').reverse()[0]
+
+//======================== Case_History | New_Tab_Case_Number_Field Section_Start ===================================//
+    !function newTabFieldSetup() {
+        gbl.eles.caseDocsNewTabButton = createNewEle('button', { textContent: "GO", style: "line-height: inherit; padding: 0 8px; margin-left: -10px; min-width: unset; font-size: 10px", })
+        gbl.eles.newTabFieldDiv = createNewEle('div', { id: "newTabFieldDiv", style: "display: flex; gap: 20px;" })
+        gbl.eles.caseHistory = createNewEle('datalist', { id: "caseHistory", style: "visibility: hidden;" })
+        gbl.eles.navContainer.appendChild(gbl.eles.newTabFieldDiv).append(gbl.eles.newTabField, gbl.eles.caseDocsNewTabButton, gbl.eles.caseHistory)
+
+        function removeHistoryFocusClasses() { Array.from(gbl.eles.caseHistory?.querySelectorAll('.caseHistoryFocus, .caseHistoryFocusKB'), ele => { ele.classList.remove('caseHistoryFocus', 'caseHistoryFocusKB') }); };
+        function hideCaseHistory() { toggleVisible(gbl.eles.caseHistory, false); removeHistoryFocusClasses() };
+        function pageOpenNTF(event, pageNameNTF) {
+            event.preventDefault();
+            let enterFromKB = event.key === 'Enter' ? gbl.eles.caseHistory?.querySelector('.caseHistoryFocusKB') : undefined
+            if (enterFromKB) {
+                gbl.eles.newTabField.value = Number(enterFromKB.id.split('history')[1])
+                gbl.eles.newTabField.select()
+                hideCaseHistory()
+                return;
+            };
+            if (!testCaseNum(gbl.eles.newTabField.value)) { return; }
+            navToCaseFileNTF()
+            gbl.eles.newTabField.value = ''
+            hideCaseHistory()
+            gbl.eles.newTabField.blur()
         };
-    }();
-
-// Case history in Nav Bar. (Just steal entire code from mec2functions.)
-
-// Link to "All Docs" in Nav Bar? (would need to store the name from the Home Page)
-// 	document.querySelector('span[title="My DocBox - Document Processing Center library"] a[title="All Documents - Document Processing Center"]').href.split('/').reverse()[0]
-
+        function caseHistoryChangeFocus(event) {
+            let currentFocusedTarget = gbl.eles.caseHistory?.querySelector('.caseHistoryFocus') ?? undefined
+            removeHistoryFocusClasses()
+            let focusTarget = (() => {
+                switch (event.key) {
+                    case "ArrowDown": return !currentFocusedTarget ? gbl.eles.caseHistory?.children[0] : currentFocusedTarget === Array.from(gbl.eles.caseHistory?.children)?.at(-1) ? currentFocusedTarget : currentFocusedTarget.nextElementSibling;
+                    case "ArrowUp": return !currentFocusedTarget ? Array.from(gbl.eles.caseHistory?.children)?.at(-1) : currentFocusedTarget === gbl.eles.caseHistory?.children[0] ? currentFocusedTarget : currentFocusedTarget.previousElementSibling;
+                    default: return event.target.closest('div.caseHistoryEntry');
+                };
+            })();
+            focusTarget?.classList.add(...(!!event.key ? ['caseHistoryFocus', 'caseHistoryFocusKB'] : ['caseHistoryFocus']))
+        };
+        !function caseHistoryDatalist() {
+            if (iFramed || !(gbl.eles.newTabField instanceof HTMLElement)) { return };
+            try {
+                const caseHistory = sanitize.json(localStorage.getItem('MECH2.caseHistoryLS')) ?? []
+                if (page.alias === "CaseFile") { addToCaseHistoryArray() }
+                function addToCaseHistoryArray() {
+                    const caseIdValTest = (entry) => entry.caseIdValNumber === caseData.caseNum, foundDuplicate = caseHistory.findIndex(caseIdValTest)
+                    if (foundDuplicate > -1) { caseHistory.splice(foundDuplicate, 1) }
+                    let timestamp = dateFuncs.formatDate(new Date(), "mmddhm"), newEntry = { caseIdValNumber: caseData.caseNum, caseName: caseData.caseName, time: timestamp };
+                    while (caseHistory.length > 9) { caseHistory.pop() }
+                    caseHistory.unshift(newEntry)
+                    localStorage.setItem('MECH2.caseHistoryLS', JSON.stringify(caseHistory));
+                };
+                caseHistory.map(
+                    ({ caseIdValNumber, time, caseName } = {}) => {
+                        let historyEntry = createNewEle('div', { id: 'history' + sanitize.number(caseIdValNumber), classList: "caseHistoryEntry" })
+                        historyEntry
+                            .append(
+                            createNewEle('span', { textContent: sanitize.timeStamp(time) }),
+                            createNewEle('span', { textContent: sanitize.string(caseName) }),
+                            createNewEle('span', { textContent: sanitize.number(caseIdValNumber) })
+                        )
+                        return historyEntry
+                    }
+                ).forEach(ele => gbl.eles.caseHistory.appendChild(ele));
+                let historyList = [...gbl.eles.caseHistory?.children]
+                !function addEventListenerSection() {
+                    gbl.eles.newTabField.addEventListener('focus', focusEvent => {
+                        filterHistory(focusEvent.target.value, undefined)
+                        document.addEventListener('click', hideHistoryClick)
+                    });
+                    gbl.eles.newTabField.addEventListener('paste', pasteEvent => {
+                        pasteEvent.preventDefault();
+                        let pastedText = (pasteEvent.clipboardData || window.clipboardData).getData("text").trim()
+                        if ( !testCaseNum(pastedText) ) { return };
+                        gbl.eles.newTabField.value = pastedText
+                        filterHistory(pastedText, undefined)
+                    });
+                    gbl.eles.newTabField.addEventListener('input', inputEvent => { filterHistory(inputEvent.target.value, inputEvent.inputType) });
+                    gbl.eles.caseHistory.addEventListener('click', clickEvent => {
+                        gbl.eles.newTabField.value = Number(clickEvent.target.closest('div.caseHistoryEntry').id.split('history')[1])
+                        gbl.eles.newTabField.select()
+                        hideCaseHistory()
+                    });
+                    gbl.eles.caseHistory?.addEventListener('mouseover', mouseoverEvent => {
+                        if (mouseoverEvent.target.closest('div.caseHistoryEntry')?.classList?.contains('caseHistoryFocus')) { return };
+                        caseHistoryChangeFocus(mouseoverEvent)
+                    });
+                    gbl.eles.newTabField.addEventListener('keydown', keydownEvent => {
+                        keydownEvent.stopImmediatePropagation()
+                        if (
+                            ( /[0-9]/.test(keydownEvent.key) && /^\d{0,12}$/.test(keydownEvent.target.value) )
+                            || ( keydownEvent.ctrlKey && ['v', 'a', 'x', 'c', 'z'].includes(keydownEvent.key) )
+                            || [ 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Home', 'End', 'Tab' ].includes(keydownEvent.key)
+                        ) { return };
+                        switch (keydownEvent.key) {
+                            case 'Enter': pageOpenNTF(keydownEvent); break;
+                            case 'Escape': hideCaseHistory(); gbl.eles.newTabField.blur(); break;
+                            case 'ArrowUp':
+                            case 'ArrowDown': caseHistoryChangeFocus(keydownEvent); break;
+                            default: break;
+                        };
+                        keydownEvent.preventDefault()
+                    });
+                    gbl.eles.caseDocsNewTabButton.addEventListener('click', navToCaseFileNTF);
+                }();
+                function filterHistory(inputValue, inputType) {
+                    if (!inputValue) {
+                        unhideElement(historyList, true)
+                        if (inputType && inputType === 'deleteByCut') {
+                            hideCaseHistory()
+                            gbl.eles.newTabField.blur();
+                            return;
+                        };
+                        toggleVisible(gbl.eles.caseHistory, true)
+                        return;
+                    };
+                    let inputMatch = historyList.filter( ele => ele.id.includes(inputValue) )
+                    if (inputMatch.length) {
+                        toggleVisible(gbl.eles.caseHistory, true)
+                        historyList.forEach(ele => inputMatch.includes(ele) ? unhideElement(ele, true) : unhideElement(ele, false) )
+                    } else { hideCaseHistory() };
+                };
+                function hideHistoryClick(clickEvent) {
+                    if ( clickEvent.target.closest('#newTabFieldDiv') ) { return };
+                    hideHistoryRemoveEvent()
+                };
+                function hideHistoryRemoveEvent() {
+                    hideCaseHistory()
+                    document.removeEventListener('click', hideHistoryClick)
+                };
+            } catch (err) { console.trace(err) };
+        }();
+    }(); //======================== Case_History | New_Tab_Case_Number_Field Section_End ===================================//
 }();
-!function fixPageHeader() {
-    let caseIdNameNeighbor = mainBody.querySelector('#CaseFileHeaderStatus'), caseIdNameEle = caseIdNameNeighbor?.previousElementSibling; if (!caseIdNameEle) { return };
-    let caseIdName = caseIdNameEle.textContent.match(/(?<caseNum>\d{8}) (?<caseName>[A-Z-,' ]+) \w?$/i).groups
-    document.querySelector('title').textContent = caseIdName.caseName + " - " + parseInt(caseIdName.caseNum, 10)
-}();
+
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+// //////////////////////////////////////////////////////////////////////////////// PAGE_SPECIFIC SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
 !async function AllItems() {
     if (page.alias !== "AllItems") { return };
     let docTableArea = mainBody.querySelector('#scriptWPQ1'), allDocsLink = docTableArea.querySelector('.ms-csrlistview-controldiv > span > a[aria-label="All Documents, View, Selected"]'),
         docTable = await waitForEleWithAncestor('table[summary="Document Processing Center"] > tbody', docTableArea)
     allDocsLink.textContent = allDocsLink.textContent + " (" + docTable.querySelectorAll('tr').length + ")"
+    //slider to hide pending?
 }();
 !function CaseFile() {
-    if (page.alias !== "CaseFile") { return };
-    document.querySelector('li[aria-controls="DPC"]').click()
+    if (page.alias !== "CaseFile" || !caseData.caseNum) { return };
+    // newTabFieldSetup()
+    !function fixPageHeader() {
+        document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
+    }();
+    setTimeout(() => { document.querySelector('li[aria-controls="DPC"][aria-selected="false"]')?.click() }, 300)
 }();
 !function DocDisc() {
     if (page.alias !== "DocDisc") { return };
     document.querySelector('#MSOZoneCell_WebPartWPQ4').style.display = "inline-table"
 }();
-
-// Scan, Subscription:
-// 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
-
 !async function Subs() { // need to add an event for table head click to refresh stuff //
+// Changing names to Last, First: Problematic, as there doesn't seem to be a way to do it programatically. Seems to require a mouse click, but mouseclick loads the 'edit only this entry' page. That page could be changed programatically, but would be slow.
+// There's a hidden input element, #jsgrid_editboxspgridcontainer_WPQ1, that might need an event. But the page probably won't change the target of that input without a user click.
     if (page.alias !== "Subs") { return };
     let caseListTable = await waitForTableCells(document.querySelector('#scriptWPQ1'))
     const [uniques, duplicates] = (function() {
@@ -183,14 +388,21 @@ function tbodLoadedElesSecondary() {
     let dupeCases = createNewEle('div', { textContent: "Duplicate Cases: " + duplicates.join(', ') }), uniqueCases = createNewEle('div', { textContent: "Unique case count: " + uniques.size })
     document.getElementById('caseWonksNavBar').append( dupeCases, uniqueCases )
 }();
+// Scan, Subscription:
+// 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
+
+// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ PAGE_SPECIFIC SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+
 // Merge for Mail:
 // 	#ribbon > mergeForMailing.click() => observe for window (form[action="/_layouts/15/NCT.Document.Merge/MergeDoumentsPreview.aspx?IsDlg=1"])
 // 		Add buttons with stock text to be entered in textarea#InstructionstoClient, such as:
 // 			The Referral to Support and Collections form is required to be completed for CCAP eligibility.
 // 			The Client Statement of Good Cause form is only required if you wish to make a good cause claim for not cooperating with child support for reasons listed on the form.
 
+
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
-// ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+// ////////////////////////////////////////////////////////////////////////////// TABLE_FUNCTIONS SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); copy(clickEvent.target.previousElementSibling?.textContent); clickEvent.target.style.filter = 'invert(1)'; }, })
 let lastCaseNum = ""
@@ -229,6 +441,29 @@ async function modifyDocumentTablesSecondary(tableBody) {
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
 };
+function modifyTableHeaders(tableBody) { Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent }) };
+function removeNotifRow(name, tr) {
+    if (name.textContent.indexOf("Notif") !== 0) { return };
+    tr.remove();
+    // todo: Change this to: tr.classList.add('toggleHidden'), add style for toggleHidden, add slider to toggle toggleHidden //
+};
+function groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) {
+    if (!caseLink) { return lastCaseNum };
+    switch(lastCaseNum) {
+        case "": { lastCaseNum = caseLink?.textContent; break; }
+        case caseLink?.textContent: { break; }
+        default: { tr.classList.add('tdBorderTop'); lastCaseNum = caseLink?.textContent; break; }
+    };
+    return lastCaseNum
+};
+
+// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ TABLE_FUNCTIONS SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+
+
+
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+// //////////////////////////////////////////////////////////////////////////////////// MODIFICATIONS START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 function doModifications(name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote, title, reviewed, caseLink, sortedByCaseNum, receivedDate) {
     modifyReviewed(reviewed)
     modifyBadTitle(title, shortNote)
@@ -243,28 +478,35 @@ function doModifications(name, createdDate, modifiedDate, taxonomy, createdBy, m
     modifyCreatedModifiedBy(createdBy)
     modifyCreatedModifiedBy(modifiedBy)
 };
-function modifyTableHeaders(tableBody) {
-    Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent });
-};
-function modifyCreatedModifiedBy(createdModifiedBy) {
-    if (!createdModifiedBy) { return };
-    let [createdIcon, createdName] = createdModifiedBy.querySelector('span')?.children
-    if (!createdName?.textContent) { return };
-    createdIcon?.remove()
-    createdName.title = createdName.textContent
-    createdName.querySelector('a').textContent = createdName.querySelector('a').textContent.split(/[@ ]/)[0]
-};
 function modifyReviewed(reviewed) {
     if (!reviewed) { return };
     reviewed.textContent = reviewed.textContent === "Yes" ? "☑" : "☒"
+};
+function modifyBadTitle(title, shortNote) {
+    if (!title) { return };
+    if (title.textContent.includes('BULK SCAN') && shortNote.textContent.length) {
+        title.textContent = shortNote.textContent
+        shortNote.textContent = ''
+    } else if (title.textContent.includes('MNB001 Application')) {
+        title.textContent = shortNote.textContent.includes("CCAP") ? "CCAP Application (MNB)" : "Combined Application (MNB)"
+        shortNote.textContent = ''
+    };
 };
 function modifyTitles(title) {
     if (!title) { return };
     titleSwaps.forEach( ([regX, swap]) => { title.textContent = title.textContent.replace(new RegExp(regX, "i"), swap) });
 };
-function removeNotifRow(name, tr) {
-    if (name.textContent.indexOf("Notif") !== 0) { return };
-    tr.remove();
+function modifyName(name) {
+    if (!name) { return };
+    let nameA = name.querySelector('a')
+    let nameNewText = nameA.textContent.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,6})_[0-9-]+/)?.groups?.filenum
+    nameA.textContent = "(view_" + (nameNewText ?? "item") + ")"
+};
+function modifyShortNote(shortNote) {
+    if (!shortNote) { return };
+        shortNote.textContent = shortNote.textContent.replace(/\d{10}_[A-Z0-9\_]+/i, '').trim()
+        shortNote.textContent = shortNote.textContent.replace(/Item ID:\d+ not found\./, '').trim()
+        shortNote.textContent = shortNote.textContent.replace(/Document uploaded via Public Portal on \d{1,2}\/\d{1,2}\/\d{1,4} \d{1,2}:\d{1,2}:\d{1,2} [AP]M(?:\sby [A-Za-z0-9\.\+\-]+\@[A-Za-z]+\.[A-Za-z]{2,4})?\sand retrieved by Portal Integration on (\d{1,2}\/\d{1,2}\/\d{1,4}) \d{1,2}:\d{1,2}:\d{1,2} [AP]M\./, 'Received via Portal on $1.').trim()
 };
 function modifyCaseLink(caseLink) {
     if ( !caseLink || ["CaseFile"].includes(page.alias) || !(/^\d{1,10}$/).test(caseLink.textContent.trim()) ) { return };
@@ -279,20 +521,6 @@ function modifyCaseLink(caseLink) {
         openCaseFile(newLinkA.textContent, "_blank")
     });
 };
-function groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) {
-    if (!caseLink) { return lastCaseNum };
-    switch(lastCaseNum) {
-        case "": { lastCaseNum = caseLink?.textContent; break; }
-        case caseLink?.textContent: { break; }
-        default: { tr.classList.add('tdBorderTop'); lastCaseNum = caseLink?.textContent; break; }
-    };
-    return lastCaseNum
-};
-function modifyDate(originalDate) {
-    if (!originalDate) { return };
-    let dateSpan = originalDate.querySelector('span')
-    dateSpan.textContent = originalDate.textContent.split(' ')[0].replace(/\d{2}(\d{2})$/, '$1')
-};
 function modifyTaxonomy(taxonomy) {
     if (!taxonomy) { return };
     let newTaxonomy = taxonomy.textContent.replace(/^([0-9.]+) ([A-Z]{2,4}) - /g, '$1: $2 ')
@@ -300,31 +528,42 @@ function modifyTaxonomy(taxonomy) {
     taxonomy.textContent = newTaxonomy
 };
 function getTaxSwap(taxonomyNumber) { return taxonomySwaps.get(taxonomyNumber) ?? undefined };
-function modifyName(name) {
-    if (!name) { return };
-    let nameA = name.querySelector('a')
-    let nameNewText = (/^[A-Z]{1,3}[0-9]{3,4}/).test(nameA.textContent) ? nameA.textContent.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,6})_[0-9-]+/)?.groups?.filenum : "item"
-    // let nameNewText = (/^[A-Z]{1,3}[0-9]{3,4}/).test(nameA.textContent) ? nameA.textContent.replace(/^(?:[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__)(<filenum>[0-9]{5,6})(?:_[0-9-]+.[A-Za-z]{3,4})/, '$1') : "item"
-    // name.querySelector('a').textContent = "(view_item)"
-    nameA.textContent = "(view_" + nameNewText + ")"
+function modifyDate(originalDate) {
+    if (!originalDate) { return };
+    let dateSpan = originalDate.querySelector('span')
+    dateSpan.textContent = originalDate.textContent.split(' ')[0].replace(/\d{2}(\d{2})$/, '$1')
 };
-function modifyShortNote(shortNote) {
-    if (!shortNote) { return };
-        shortNote.textContent = shortNote.textContent.replace(/\d{10}_[A-Z0-9\_]+/i, '').trim()
-        shortNote.textContent = shortNote.textContent.replace(/Item ID:\d+ not found\./, '').trim()
-        shortNote.textContent = shortNote.textContent.replace(/Document uploaded via Public Portal on \d{1,2}\/\d{1,2}\/\d{1,4} \d{1,2}:\d{1,2}:\d{1,2} [AP]M(?:\sby [A-Za-z0-9\.\+\-]+\@[A-Za-z]+\.[A-Za-z]{2,4})?\sand retrieved by Portal Integration on (\d{1,2}\/\d{1,2}\/\d{1,4}) \d{1,2}:\d{1,2}:\d{1,2} [AP]M\./, 'Received via Portal on $1.').trim()
-    // First sentence: Probably because PDF was sent to EFC before client completed it? //
-    // "Item ID:60448 not found.Document uploaded via Public Portal on 4/15/2026 2:38:28 PM and retrieved by Portal Integration on 4/15/2026 2:46:23 PM."
+function modifyCreatedModifiedBy(createdModifiedBy) {
+    if (!createdModifiedBy) { return };
+    let [createdIcon, createdName] = createdModifiedBy.querySelector('span')?.children
+    if (!createdName?.textContent) { return };
+    createdIcon?.remove()
+    createdName.title = createdName.textContent
+    createdName.querySelector('a').textContent = createdName.querySelector('a').textContent.split(/[@ ]/)[0]
 };
-function modifyBadTitle(title, shortNote) {
-    if (!title) { return };
-    if (title.textContent.includes('BULK SCAN')) {
-        title.textContent = shortNote.textContent
-        shortNote.textContent = ''
-    } else if (title.textContent.includes('MNB001 Application')) {
-        title.textContent = shortNote.textContent.includes("CCAP") ? "CCAP Application (MNB)" : "Combined Application (MNB)"
-        shortNote.textContent = ''
-    };
+// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ MODIFICATIONS END /////////////////////////////////////////////////////////////////////////////////////////////////
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+
+
+
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+// ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
+function snackBar(sbText, title = "Copied!", textAlign = "left") {
+    document.getElementById('snackBarDiv')?.remove()
+    let style = "opacity: 0; animation: show 2500ms 100ms cubic-bezier(0.38, 0.97, 0.56, 0.76) forwards; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none;"
+    let snackBarDiv = createNewEle('div', { id: "snackBarDiv", style })
+    title !== "notitle" && snackBarDiv.appendChild( createNewEle('span', { textContent: title }))
+    sbText.split('\n').forEach( textLine => snackBarDiv.appendChild( createNewEle('span', { textContent: textLine }) ) )
+    mainBody.appendChild(snackBarDiv)
+    setTimeout(() => { snackBarDiv.remove() }, 3000)
+};
+function openCaseFile(openCaseFileNum, target) {
+    openCaseFileNum = openCaseFileNum.trim()
+    if (!openCaseFileNum || !(/^\d{1,10}$/).test(openCaseFileNum)) { return };
+    copy(openCaseFileNum)
+    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
 };
 function visualIndicatorIfPdfSelected() {
     let selectedLength = document.querySelectorAll('tr.s4-itm-selected:has(td.ms-vb-icon > img[alt="pdf File"])').length
@@ -333,13 +572,7 @@ function visualIndicatorIfPdfSelected() {
         default: ribbon.classList.add('pdfSelected'); break;
     };
 };
-function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
-function openCaseFile(openCaseFileNum, target) {
-    openCaseFileNum = openCaseFileNum.trim()
-    if (!openCaseFileNum || !(/^\d{1,10}$/).test(openCaseFileNum)) { return };
-    copy(openCaseFileNum)
-    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
-};
+
 !function modifyTablesAsLoaded() {
     if (!'primaryTableLoc' in page || !tableLocQuery('primaryTableLoc')) { return };
     tableLocQuery('primaryTableLoc').addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
@@ -361,7 +594,6 @@ function createNewEle(nodeName, attribObj={}, dataObj={}) {
     Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
     return newEle;
 };
-// function verbose() { console.info( ...arguments, ( (new Error).stack.split('\n') ) ) }; // Edge version //
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
 
 async function waitForTableCells(awaitedTable) {
@@ -396,22 +628,16 @@ function waitForEleWithAncestor(awaitedEleStr, anchorEle=document.body) {
         };
     });
 };
-// function waitForTable(awaitedTableIn) {
-//     let defaultStr = 'tbody[id^=tbod]'
-//     const awaitedEleLocate = () => (typeof awaitedTableIn === "string") ? document.querySelector(awaitedTableIn) : awaitedTableIn instanceof HTMLElement ? awaitedTableIn : document.querySelector(defaultStr)
-//     return new Promise((resolve, reject) => {
-//         let awaitedTable = awaitedEleLocate()
-//         if ( awaitedTable) {
-//             resolve( awaitedTable ) }
-//         else {
-//             const observer = new MutationObserver(mutations => { if (awaitedTable) {
-//                 observer.disconnect(); resolve( awaitedTable ); } });
-//             observer.observe(mainBody.querySelector('#contentBox'), { childList: true, subtree: true, });
-//         };
-//     });
-// };
 
-// Subscriptions page, changing names to Last, First: Problematic, as there doesn't seem to be a way to do it programatically. Seems to require a mouse click, but mouseclick loads the 'edit only this entry' page. That page could be changed programatically, but would be slow.
-// There's a hidden input element, #jsgrid_editboxspgridcontainer_WPQ1, that might need an event. But the page probably won't change the target of that input without a user click.
+function toggleVisible(element, trueFalse) {
+    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
+    element.forEach( ele => { ele = sanitize.query(ele); ele.style.visibility = trueFalse ? 'visible' : 'hidden' } );
+};
+function unhideElement(element, trueFalse) { // true to remove hidden, false to add hidden;
+    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
+    element.forEach( ele => { ele = sanitize.query(ele); trueFalse ? ele.classList.remove('hidden') : ele.classList.add('hidden') } );
+};
+// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ FUNCTION_LIBRARY SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
 console.timeEnd('CaseWonks load time')
