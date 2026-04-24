@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.07
+// @version      0.0.08
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -13,7 +13,6 @@ console.time('CaseWonks load time')
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
 const mainBody = window.parent.document.body, thisPageName = window.location.pathname.split("/")?.reverse()[0].replaceAll("%20", ""), editionLocation = document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.toLowerCase().replace(/\W/g, '') ?? "fsestlouis",
       ribbon = document.getElementById('RibbonContainer')
-
 const sanitize = {
     evalText(text) { return String(text)?.replace(/\\/g,'').trim() },
     query(query, all = 0) {
@@ -75,7 +74,7 @@ const dateFuncs = {
 };
 const page = new Map([
     ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
-    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', secondaryTableLoc: '#scriptWPQ7' }],
+    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7' }],
     ['DocumentDiscovery.aspx', { alias: 'DocDisc', primaryTableLoc: 'table[summary="Document Processing Center"]', }],
     ['AllItems.aspx', { alias: 'AllItems', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
     ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
@@ -88,7 +87,6 @@ const page = new Map([
     ['Scan.aspx', { alias: 'DocProps' }],
     // ['', { alias: '', }],
 ]).get(thisPageName) ?? { alias: 'general' };
-const tableLocQuery = (loc) => mainBody.querySelector(page[loc])
 mainBody.classList.add(page.alias, 'CaseWonks')
 const modifiedTables = [];
 const titleSwaps = [ // escapes need double slash //
@@ -166,7 +164,7 @@ const gbl = {
 const caseData = (() => {
     let caseIdNameEle = mainBody.querySelector('#CaseFileHeaderStatus')?.previousElementSibling;
     if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
-    let splitCaseData = caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'-, ]+)/i).groups
+    let splitCaseData = caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups
     if (!editionLocation.includes("cse")) { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
     let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
     caseNumEle.addEventListener('click', clickEvent => snackBar('Copied ' + clickEvent.target.textContent, 'notitle') )
@@ -191,9 +189,9 @@ function tbodLoadedEles() {
     : Array.from(tableLocQuery('primaryTableLoc')?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true")
     return tbodArray;
 };
-function tbodLoadedElesSecondary() {
-	if (!'secondaryTableLoc' in page) { return };
-	let secondaryTablesArea = tableLocQuery('secondaryTableLoc')
+function tbodLoadedElesEFC() {
+	if (!'efcTableLoc' in page) { return };
+	let secondaryTablesArea = tableLocQuery('efcTableLoc')
     return Array.from(secondaryTablesArea?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
 };
 function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (/(?:^\d{1,8}$|^\d{12}$)/).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
@@ -429,7 +427,7 @@ async function modifyDocumentTables(tableBody) {
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
 };
-async function modifyDocumentTablesSecondary(tableBody) {
+async function modifyDocumentTablesEFC(tableBody) {
     verbose(tableBody)
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
@@ -545,20 +543,28 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
 
+!function modifyTablesAsLoaded() {
+    if (!'primaryTableLoc' in page || !tableLocQuery('primaryTableLoc')) { return };
+    tableLocQuery('primaryTableLoc').addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
+    tbodLoadedEles()?.forEach(tbod => { modifyDocumentTables(tbod) });
+    const observer = new MutationObserver(mutations => { tbodLoadedEles()?.forEach(tbod => { modifyDocumentTables(tbod) }) });
+    observer.observe(tableLocQuery('primaryTableLoc'), { childList: true, subtree: true });
+}();
+!function modifyTablesAsLoadedEFC() {
+    if ('efcTableLoc' in page) {
+        return
+        if (!'efcTableLoc' in page || !tableLocQuery('efcTableLoc')) { return };
+        verbose(tbodLoadedElesEFC())
+        tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) });
+        const observer = new MutationObserver(mutations => { tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) }) });
+        observer.observe(tableLocQuery('efcTableLoc'), { childList: true, subtree: true });
+    };
+}();
+
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
-function snackBar(sbText, title = "Copied!", textAlign = "left") {
-    document.getElementById('snackBarDiv')?.remove()
-    let style = "opacity: 0; animation: show 2500ms 100ms cubic-bezier(0.38, 0.97, 0.56, 0.76) forwards; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none;"
-    let snackBarDiv = createNewEle('div', { id: "snackBarDiv", style })
-    title !== "notitle" && snackBarDiv.appendChild( createNewEle('span', { textContent: title }))
-    sbText.split('\n').forEach( textLine => snackBarDiv.appendChild( createNewEle('span', { textContent: textLine }) ) )
-    mainBody.appendChild(snackBarDiv)
-    setTimeout(() => { snackBarDiv.remove() }, 3000)
-};
 function openCaseFile(openCaseFileNum, target) {
     openCaseFileNum = openCaseFileNum.trim()
     if (!openCaseFileNum || !(/^\d{1,10}$/).test(openCaseFileNum)) { return };
@@ -573,29 +579,24 @@ function visualIndicatorIfPdfSelected() {
     };
 };
 
-!function modifyTablesAsLoaded() {
-    if (!'primaryTableLoc' in page || !tableLocQuery('primaryTableLoc')) { return };
-    tableLocQuery('primaryTableLoc').addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
-    tbodLoadedEles()?.forEach(tbod => { modifyDocumentTables(tbod) });
-    const observer = new MutationObserver(mutations => { tbodLoadedEles()?.forEach(tbod => { modifyDocumentTables(tbod) }) });
-    observer.observe(tableLocQuery('primaryTableLoc'), { childList: true, subtree: true });
-}();
-!function modifyTablesAsLoadedSecondary() {
-    if ('secondaryTableLoc' in page) {
-        return
-        verbose(tbodLoadedElesSecondary())
-        tbodLoadedElesSecondary()?.forEach(tbod => { modifyDocumentTablesSecondary(tbod) });
-        const observer = new MutationObserver(mutations => { tbodLoadedElesSecondary()?.forEach(tbod => { modifyDocumentTablesSecondary(tbod) }) });
-        observer.observe(tableLocQuery('secondaryTableLoc'), { childList: true, subtree: true });
-    };
-}();
+function tableLocQuery(loc) { return mainBody.querySelector(page[loc]) };
+
 function createNewEle(nodeName, attribObj={}, dataObj={}) {
     let newEle = Object.assign(document.createElement(nodeName), attribObj);
     Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
     return newEle;
 };
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
-
+function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
+function snackBar(sbText, title = "Copied!", textAlign = "left") {
+    document.getElementById('snackBarDiv')?.remove()
+    let style = "opacity: 0; animation: show 2500ms 100ms cubic-bezier(0.38, 0.97, 0.56, 0.76) forwards; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none;"
+    let snackBarDiv = createNewEle('div', { id: "snackBarDiv", style })
+    title !== "notitle" && snackBarDiv.appendChild( createNewEle('span', { textContent: title }))
+    sbText.split('\n').forEach( textLine => snackBarDiv.appendChild( createNewEle('span', { textContent: textLine }) ) )
+    mainBody.appendChild(snackBarDiv)
+    setTimeout(() => { snackBarDiv.remove() }, 3000)
+};
 async function waitForTableCells(awaitedTable) {
     return new Promise((resolve, reject) => {
         if ( awaitedTable?.querySelector('tr > td:nth-child(2)') ) { resolve( awaitedTable ) }
@@ -610,7 +611,6 @@ async function waitForTableCells(awaitedTable) {
         };
     });
 };
-
 function waitForEleWithAncestor(awaitedEleStr, anchorEle=document.body) {
     if (!anchorEle) { return };
     awaitedEleStr ??= 'tbody[id^=tbod]'
@@ -628,7 +628,6 @@ function waitForEleWithAncestor(awaitedEleStr, anchorEle=document.body) {
         };
     });
 };
-
 function toggleVisible(element, trueFalse) {
     element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
     element.forEach( ele => { ele = sanitize.query(ele); ele.style.visibility = trueFalse ? 'visible' : 'hidden' } );
