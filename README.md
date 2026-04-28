@@ -1,3 +1,9 @@
+# FAQs
+Q: Is it stable?  
+A: As stable as anyone working in CaseWorks.  
+Q: Why did you make this:  
+A: I don't like to be miserable while I work.
+
 # Installation
 
 Tip: Right click links and then click "Open link in new tab". Tabs can be closed after doing the install.
