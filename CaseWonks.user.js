@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.10
+// @version      0.0.11
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -122,6 +122,8 @@ const titleSwaps = [ // escapes need double slash //
     [`Portal400 General Proof of Residency "Utility Bills, Rent, Lease Agreement, Eviction Notice, Home-Owner's Insurance, etc\\."`, "Portal doc: Residency"],
     ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six\\-Month Report", "Notice of late HRF, HCR, CSMR"],
     ["Social Security", "SS"],
+    ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC Services"],
+    ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
     // ["", ""],
     // ["", ""],
     // ["", ""],
@@ -167,7 +169,7 @@ const shortNoteSwaps = [
     ["\\d{10}\\_[A-Z0-9\\_]+", ""],
     ["Item ID\\:\\d+ not found\\.", ""],
     ["Document uploaded via Public Portal on \\d{1,2}\\/\\d{1,2}\\/\\d{1,4} \\d{1,2}:\\d{1,2}:\\d{1,2} [AP]M(?:\\sby [A-Za-z0-9\\.\\+\\-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4})?\\sand retrieved by Portal Integration on (\\d{1,2}\/\\d{1,2}\\/\\d{1,4}) \\d{1,2}:\\d{1,2}:\\d{1,2} [AP]M\\.", "Received via Portal on $1."],
-    ["\\*TO: \\+\\d{10,11} FROM: (\\d{10,11}).*", "Fax from $1"],
+    ["\\*TO: \\+?\\d{10,11} FROM: (\\d{10,11}).*", "Fax from $1"],
     ["Auto-Copy from ([A-Z]{3})", "$1 auto-copy"],
     ["^Web$", ""],
     // ["", ""],
@@ -365,25 +367,107 @@ const caseData = (() => {
 !function DocDisc() {
     if (page.alias !== "DocDisc") { return };
     document.querySelector('#MSOZoneCell_WebPartWPQ4').style.display = "inline-table"
+    const hideNotificationsSlider = createSlider({ textContent: "Toggle Notifications", title: "Show or Hide 'Notification' rows.", checked: "checked", id: "hideNotificationsSliderCheck" })
+    const hideNotificationsStyle = createNewEle('style', { textContent: ".toggleHidden { display: none; }" })
+    hideNotificationsSlider.addEventListener('click', clickEvent => {
+        switch(clickEvent.target.checked) {
+            case true: hideNotificationsStyle.textContent = ".toggleHidden { display: none; }"; break;
+            case false: hideNotificationsStyle.textContent = ".toggleHidden { display: table-row; }"; break;
+        };
+    });
+    mainBody.append(hideNotificationsStyle)
+    gbl.eles.navContainer.append(hideNotificationsSlider)
 }();
-!async function Subs() { // need to add an event for table head click to refresh stuff //
-// Changing names to Last, First: Problematic, as there doesn't seem to be a way to do it programatically. Seems to require a mouse click, but mouseclick loads the 'edit only this entry' page. That page could be changed programatically, but would be slow.
-// There's a hidden input element, #jsgrid_editboxspgridcontainer_WPQ1, that might need an event. But the page probably won't change the target of that input without a user click.
+!async function Subs() {
     if (page.alias !== "Subs") { return };
+
+    const dupeCases = createNewEle('div'), uniqueCases = createNewEle('div')
+    const compareButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px;" }),
+          compareOpenButton = createNewEle('button', { textContent: "Compare" }),
+          compareResetButton = createNewEle('button', { textContent: "Reset", style: "display: none;" }),
+          compareDialog = createNewEle('dialog'),
+          compareInstructions = createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
+          compareTextarea = createNewEle('textarea', { style: "height: 20vh;", id: "compareTextarea" }),
+          compareButtonDiv = createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center;" }),
+          compareOkButton = createNewEle('button', { textContent: "OK" }),
+          compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
+          compareUnmatched = createNewEle('div', { textContent: "Unmatched Case Numbers:", style: "display: none; position: fixed; right: 5vw; top: 15vh;" }),
+          compareDialogStyle = createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; }" }),
+          compareStyle = createNewEle('style', { textContent: ".compareMatch * { color: light-dark(#A94D15, #ffa700) !important; }" })
+    compareButtonContainer.append(compareOpenButton, compareResetButton)
+    gbl.eles.navContainer.append( dupeCases, uniqueCases, compareButtonContainer )
+    mainBody.append(
+        ...arrangeElements(
+            [compareDialog,
+             [compareInstructions,
+              compareTextarea,
+              compareButtonDiv,
+              [compareOkButton,
+               compareCancelButton]
+             ],
+             compareUnmatched,
+             compareStyle,
+             compareDialogStyle
+            ])
+    );
+
     let caseListTable = await waitForTableCells(document.querySelector('#scriptWPQ1'))
-    const [uniques, duplicates] = (function() {
-        const uniqueCount = new Set(), caseList = Array.from(caseListTable.querySelectorAll('tbody tr'), tr => { let trChildren = tr?.children; return [trChildren[4]?.textContent, trChildren[5]?.textContent] })
-        const duplicateList = caseList.filter(item => {
-            if (!item[0]) { return false };
-            if (uniqueCount.has(item)) { return item[0] };
-            uniqueCount.add(item[0]);
-            return false;
+    let rowMap = new Map()
+    function checkForDuplicates() {
+        const [uniques, duplicates] = (function() {
+            rowMap = new Map()
+            const uniqueCount = new Set(),
+                  caseList = Array.from(caseListTable.querySelectorAll('tbody tr'), tr => {
+                      let [ ,,,, caseId, workerName ] = tr?.children
+                      let caseIdNum = caseId?.textContent?.trim()
+                      if ( !(/^\d+$/).test(caseIdNum) ) { return [] };
+                      rowMap.set(caseIdNum, tr)
+                      let trChildren = tr?.children; return [caseIdNum, workerName?.textContent]
+                  });
+            const duplicateList = caseList?.filter(item => {
+                if (!item[0]) { return false }; // no case # //
+                if (uniqueCount?.has(item)) { return item[0] };
+                uniqueCount?.add(item[0]);
+                return false;
+            });
+            return [uniqueCount, duplicateList]
+        })();
+        if (duplicates.length === 0) { duplicates.push("None found") }
+        dupeCases.textContent = "Duplicate Cases: " + duplicates.join(', ')
+        uniqueCases.textContent = "Unique case count: " + uniques.size
+    };
+
+    compareOpenButton.addEventListener('click', () => {
+        compareDialog.showModal()
+        checkForDuplicates()
+    });
+    compareResetButton.addEventListener('click', () => {
+        Array.from( mainBody.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
+        compareResetButton.style.display = "none"
+        compareUnmatched.style.display = "none"
+        dupeCases.textContent = ""
+        uniqueCases.textContent = ""
+    });
+    function okEvent() {
+        if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
+        let unmatchedNumbers = []
+        compareTextarea.value.trim().split(/, ?/).filter(e => e).forEach(caseNum => {
+            let matchedRow = rowMap.get(caseNum)
+            if (!matchedRow) {
+                unmatchedNumbers.push(caseNum)
+                return;
+            };
+            matchedRow?.classList.add('compareMatch')
         });
-        return [uniqueCount, duplicateList]
-    })();
-    if (duplicates.length === 0) { duplicates.push("None found") }
-    let dupeCases = createNewEle('div', { textContent: "Duplicate Cases: " + duplicates.join(', ') }), uniqueCases = createNewEle('div', { textContent: "Unique case count: " + uniques.size })
-    document.getElementById('caseWonksNavBar').append( dupeCases, uniqueCases )
+        compareDialog.close()
+        compareResetButton.style.display = "block"
+        Array.from(compareUnmatched.querySelectorAll('div'), ele => ele.remove())
+        compareUnmatched.append(...unmatchedNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
+        compareUnmatched.style.display = "block"
+    };
+    compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
+    compareOkButton.addEventListener('click', okEvent);
+    compareCancelButton.addEventListener('click', () => { compareDialog.close(); });
 }();
 // Scan, Subscription:
 // 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
@@ -419,7 +503,7 @@ async function modifyDocumentTables(tableBody) {
         if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
 
         if (["DocDisc"].includes(page.alias)) {
-            removeNotifRow(name, tr)
+            hideNotificationRows(name, tr)
         };
         if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) };
         doModifications(name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote, title, reviewed, caseLink, sortedByCaseNum, receivedDate)
@@ -441,9 +525,10 @@ async function modifyDocumentTablesEFC(tableBody) {
     modifiedTables.push(tableBody)
 };
 function modifyTableHeaders(tableBody) { Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent }) };
-function removeNotifRow(name, tr) {
+function hideNotificationRows(name, tr) {
     if (name.textContent.indexOf("Notif") !== 0) { return };
-    tr.remove();
+    tr.classList.add('toggleHidden')
+    // tr.remove();
     // todo: Change this to: tr.classList.add('toggleHidden'), add style for toggleHidden, add slider to toggle toggleHidden //
 };
 function groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) {
@@ -481,6 +566,26 @@ function modifyReviewed(reviewed) {
     if (!reviewed) { return };
     reviewed.textContent = reviewed.textContent === "Yes" ? "☑" : "☒"
 };
+// function modifyTitles(title) { // crashes page //
+//     if (!title) { return };
+//     let titleOrigText = title.textContent
+//     let titleRegExText = title.textContent
+//     titleSwaps.forEach( ([regX, swap]) => { titleRegExText = titleRegExText.replace(new RegExp(regX, "i"), swap) });
+//     title.textContent = ""
+//     let titleSpan = createNewEle('span', { title: titleOrigText, textContent: titleRegExText })
+//     title.appendChild( titleSpan )
+
+//     !function modifyBadTitle(title, shortNote) {
+//         if (title.textContent.includes('BULK SCAN') && shortNote.textContent.length) {
+//             titleSpan.textContent = shortNote.textContent
+//             shortNote.textContent = ''
+//         } else if (title.textContent.includes('MNB001 Application')) {
+//             titleSpan.textContent = shortNote.textContent.includes("CCAP") ? "CCAP Application (MNB)" : "Combined Application (MNB)"
+//             shortNote.textContent = ''
+//         };
+//     }();
+// };
+
 function modifyTitles(title) {
     if (!title) { return };
     let titleOrigText = title.textContent
@@ -611,11 +716,34 @@ function tbodLoadedElesEFC(tableLoc) {
 };
 
 
-
 function createNewEle(nodeName, attribObj={}, dataObj={}) {
     let newEle = Object.assign(document.createElement(nodeName), attribObj);
     Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
     return newEle;
+};
+function arrangeElements(elementArray) {
+	const validArray = item => Array.isArray(item) && item.length > 1
+	return elementArray.map((item, i, arr) => validArray(item) ? subLevels(item, arr[i-1]) : item ).filter(e=>e)
+	function subLevels(eleArr, parent) {
+		eleArr.forEach((item, i) => {
+			let newParent = Array.isArray(item) ? parent.lastElementChild : parent
+			validArray(item) ? subLevels(item, newParent) : newParent.appendChild(item)
+		});
+	};
+};
+function createSlider({ textContent, title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
+    let toggleSlider = createNewEle('div', { classList: ["toggle-slider", extraClasses].join(' '), style: extraStyles })
+    toggleSlider.append(
+        ...arrangeElements(
+            [createNewEle('label', { title, textContent }),
+             createNewEle('label', { classList: "switch", style: (fontSize && "font-size: " + fontSize + ";") }),
+             [createNewEle('input', { type: "checkbox", id, checked }),
+              createNewEle('span', { classList: "slider round" })
+             ]
+            ]
+        )
+    );
+    return toggleSlider;
 };
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
 function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
