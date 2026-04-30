@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.11
+// @version      0.0.12
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -392,10 +392,10 @@ const caseData = (() => {
           compareOkButton = createNewEle('button', { textContent: "OK" }),
           compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
           compareUnmatched = createNewEle('div', { textContent: "Unmatched Case Numbers:", style: "display: none; position: fixed; right: 5vw; top: 15vh;" }),
-          compareDialogStyle = createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; }" }),
-          compareStyle = createNewEle('style', { textContent: ".compareMatch * { color: light-dark(#A94D15, #ffa700) !important; }" })
+          compareDialogStyle = createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; width: 400px; }" }),
+          compareStyle = createNewEle('style', { textContent: ".compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" })
     compareButtonContainer.append(compareOpenButton, compareResetButton)
-    gbl.eles.navContainer.append( dupeCases, uniqueCases, compareButtonContainer )
+    gbl.eles.navContainer.append( compareButtonContainer, dupeCases, uniqueCases )
     mainBody.append(
         ...arrangeElements(
             [compareDialog,
@@ -416,23 +416,24 @@ const caseData = (() => {
     function checkForDuplicates() {
         const [uniques, duplicates] = (function() {
             rowMap = new Map()
-            const uniqueCount = new Set(),
-                  caseList = Array.from(caseListTable.querySelectorAll('tbody tr'), tr => {
-                      let [ ,,,, caseId, workerName ] = tr?.children
-                      let caseIdNum = caseId?.textContent?.trim()
-                      if ( !(/^\d+$/).test(caseIdNum) ) { return [] };
-                      rowMap.set(caseIdNum, tr)
-                      let trChildren = tr?.children; return [caseIdNum, workerName?.textContent]
-                  });
-            const duplicateList = caseList?.filter(item => {
-                if (!item[0]) { return false }; // no case # //
-                if (uniqueCount?.has(item)) { return item[0] };
-                uniqueCount?.add(item[0]);
+            const uniqueCount = new Set()
+            const caseList = Array.from(caseListTable.querySelectorAll('tbody tr'), tr => {
+                let [ ,,,, caseId, workerName ] = tr?.children
+                let caseIdNum = caseId?.textContent?.trim()
+                if ( !(/^\d+$/).test(caseIdNum) ) { return [] };
+                rowMap.set(caseIdNum, tr)
+                return [caseIdNum, workerName?.textContent];
+            }).filter(e => e.length);
+            const duplicateList = caseList?.map(([caseIdNum, workerName] = []) => {
+                if (!caseIdNum) { return false };
+                if ( uniqueCount?.has(caseIdNum) ) { return caseIdNum };
+                uniqueCount?.add(caseIdNum);
                 return false;
-            });
+            }).filter(e => e);
             return [uniqueCount, duplicateList]
         })();
         if (duplicates.length === 0) { duplicates.push("None found") }
+        else { duplicates.forEach(caseIdNum => { rowMap.get(caseIdNum).classList.add('duplicateMatch') }) }
         dupeCases.textContent = "Duplicate Cases: " + duplicates.join(', ')
         uniqueCases.textContent = "Unique case count: " + uniques.size
     };
