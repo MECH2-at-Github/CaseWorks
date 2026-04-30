@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.12
+// @version      0.0.13
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -381,61 +381,77 @@ const caseData = (() => {
 !async function Subs() {
     if (page.alias !== "Subs") { return };
 
-    const dupeCases = createNewEle('div'), uniqueCases = createNewEle('div')
-    const compareButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px;" }),
-          compareOpenButton = createNewEle('button', { textContent: "Compare" }),
+    const dupeCases = createNewEle('div'), uniqueCases = createNewEle('div'), matchedCount = createNewEle('div')
+    const compareOpenButton = createNewEle('button', { textContent: "Compare" }),
           compareResetButton = createNewEle('button', { textContent: "Reset", style: "display: none;" }),
           compareDialog = createNewEle('dialog'),
-          compareInstructions = createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
           compareTextarea = createNewEle('textarea', { style: "height: 20vh;", id: "compareTextarea" }),
-          compareButtonDiv = createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center;" }),
           compareOkButton = createNewEle('button', { textContent: "OK" }),
           compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
-          compareUnmatched = createNewEle('div', { textContent: "Unmatched Case Numbers:", style: "display: none; position: fixed; right: 5vw; top: 15vh;" }),
-          compareDialogStyle = createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; width: 400px; }" }),
-          compareStyle = createNewEle('style', { textContent: ".compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" })
-    compareButtonContainer.append(compareOpenButton, compareResetButton)
-    gbl.eles.navContainer.append( compareButtonContainer, dupeCases, uniqueCases )
+          compareUnmatched = createNewEle('div', { textContent: "Unmatched Case Numbers:", style: "display: none; position: fixed; right: 5vw; top: 15vh;" })
+    gbl.eles.navContainer.append( ...arrangeElements([createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ]]), dupeCases, uniqueCases, matchedCount )
     mainBody.append(
         ...arrangeElements(
             [compareDialog,
-             [compareInstructions,
+             [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
               compareTextarea,
-              compareButtonDiv,
+              createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center;" }),
               [compareOkButton,
                compareCancelButton]
              ],
              compareUnmatched,
-             compareStyle,
-             compareDialogStyle
+             createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; width: 400px; } .compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" }),
             ])
     );
 
-    let caseListTable = await waitForTableCells(document.querySelector('#scriptWPQ1'))
-    let rowMap = new Map()
-    function checkForDuplicates() {
+    let caseListTableAncestor = async () => await waitForTableCells(document.querySelector('#scriptWPQ1'))
+    const rowMap = new Map()
+    const editLinkLocator = () => document.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')
+    const editLink = editLinkLocator()
+    editLink.addEventListener('click', async clickEvent => {
+        if (!rowMap.size) { return };
+        let existingAncestor = mainBody.querySelector('#scriptWPQ1')
+        let existingTable = mainBody.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
+        const observer = new MutationObserver(async () => { // wait for old table to be destroyed //
+            if (existingTable.isConnected) { return };
+            observer.disconnect();
+            await caseListTableAncestor() // wait for new table //
+            checkForDuplicates(true)
+        });
+        observer.observe(existingAncestor, { childList: true, subtree: true });
+    });
+    function setVarsBasedOnEditMode(editMode, tr) {
+        switch(editMode) {
+            case "edit": return tr?.children[4];
+            case "Stop": return tr?.children[3];
+        };
+    };
+    async function checkForDuplicates(followWithOkEvent) {
+        const caseListTrs = await Array.from( (await caseListTableAncestor())?.querySelectorAll('tbody tr') )
+        const editMode = editLinkLocator().textContent
         const [uniques, duplicates] = (function() {
-            rowMap = new Map()
-            const uniqueCount = new Set()
-            const caseList = Array.from(caseListTable.querySelectorAll('tbody tr'), tr => {
-                let [ ,,,, caseId, workerName ] = tr?.children
-                let caseIdNum = caseId?.textContent?.trim()
+            rowMap.clear()
+            const uniqueSet = new Set()
+            const caseList = caseListTrs.map(tr => {
+                let caseIdTd = setVarsBasedOnEditMode(editMode, tr)
+                let caseIdNum = caseIdTd?.textContent?.trim()
                 if ( !(/^\d+$/).test(caseIdNum) ) { return [] };
                 rowMap.set(caseIdNum, tr)
-                return [caseIdNum, workerName?.textContent];
+                return caseIdNum;
             }).filter(e => e.length);
-            const duplicateList = caseList?.map(([caseIdNum, workerName] = []) => {
+            const duplicateList = caseList?.map(caseIdNum => {
                 if (!caseIdNum) { return false };
-                if ( uniqueCount?.has(caseIdNum) ) { return caseIdNum };
-                uniqueCount?.add(caseIdNum);
+                if ( uniqueSet?.has(caseIdNum) ) { return caseIdNum };
+                uniqueSet?.add(caseIdNum);
                 return false;
             }).filter(e => e);
-            return [uniqueCount, duplicateList]
+            return [uniqueSet, duplicateList]
         })();
         if (duplicates.length === 0) { duplicates.push("None found") }
-        else { duplicates.forEach(caseIdNum => { rowMap.get(caseIdNum).classList.add('duplicateMatch') }) }
+        else { duplicates.forEach(caseIdNum => { rowMap.get(caseIdNum).classList.add('duplicateMatch') }) };
         dupeCases.textContent = "Duplicate Cases: " + duplicates.join(', ')
-        uniqueCases.textContent = "Unique case count: " + uniques.size
+        uniqueCases.textContent = "Unique Count: " + uniques.size
+        if (followWithOkEvent) { okEvent() };
     };
 
     compareOpenButton.addEventListener('click', () => {
@@ -448,11 +464,14 @@ const caseData = (() => {
         compareUnmatched.style.display = "none"
         dupeCases.textContent = ""
         uniqueCases.textContent = ""
+        matchedCount.textContent = ""
     });
     function okEvent() {
+        if (!compareTextarea?.value) { return };
         if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
         let unmatchedNumbers = []
-        compareTextarea.value.trim().split(/, ?/).filter(e => e).forEach(caseNum => {
+        let userCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
+        userCaseList.forEach(caseNum => {
             let matchedRow = rowMap.get(caseNum)
             if (!matchedRow) {
                 unmatchedNumbers.push(caseNum)
@@ -465,6 +484,7 @@ const caseData = (() => {
         Array.from(compareUnmatched.querySelectorAll('div'), ele => ele.remove())
         compareUnmatched.append(...unmatchedNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
         compareUnmatched.style.display = "block"
+        matchedCount.textContent = "Match Count: " + (userCaseList.length - unmatchedNumbers.length) + '/' + userCaseList.length
     };
     compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
     compareOkButton.addEventListener('click', okEvent);
@@ -766,10 +786,10 @@ function snackBar(sbText, title="Copied!", doCopy=true) {
 };
 async function waitForTableCells(awaitedTable) {
     return new Promise((resolve, reject) => {
-        if ( awaitedTable?.querySelector('tr > td:nth-child(2)') ) { resolve( awaitedTable ) }
+        if ( awaitedTable?.querySelector('tbody tr > td:nth-child(2)') ) { resolve( awaitedTable ) }
         else {
             const observer = new MutationObserver(() => {
-                if (awaitedTable?.querySelector('tr > td:nth-child(2)')) {
+                if (awaitedTable?.querySelector('tbody tr > td:nth-child(2)')) {
                     observer.disconnect();
                     resolve( awaitedTable );
                 };
