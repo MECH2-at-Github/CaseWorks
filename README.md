@@ -10,7 +10,7 @@ A: If it doesn't, I'll do my best to make it work.
   
 Q: What does it do?  
 A: Mostly changes words. Also adds some links. Eventually more things.
-<img width="1200" alt="CaseWorks Home Page" src="https://github.com/user-attachments/assets/c71930d0-265f-4dae-8a81-49c1f4c0953a" />
+<img width="1200" alt="CaseWorks Home Page" src="https://github.com/user-attachments/assets/bcab583f-127e-4e33-83c7-420bd629758e" />
 
 
 # Installation
