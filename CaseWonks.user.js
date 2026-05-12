@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.14
+// @version      0.0.15
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -14,9 +14,35 @@
 
 console.time('CaseWonks load time')
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
-const mainBody = window.parent.document.body, thisPageName = window.location.pathname.split("/")?.reverse()[0].replaceAll("%20", ""), editionLocation = document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.toLowerCase().replace(/\W/g, '') ?? "fsestlouis",
+const mainBody = window.parent.document.body, thisPageName = window.location.pathname.split("/")?.reverse()[0].replaceAll("%20", ""),
       ribbon = document.getElementById('RibbonContainer')
 
+const page = new Map([
+    ['AllItems.aspx', { alias: 'AllItems', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7' }],
+    ['DocBox.aspx', { alias: 'DocBox', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['DocumentDiscovery.aspx', { alias: 'DocDisc', primaryTableLoc: 'table[summary="Document Processing Center"]', }],
+    ['eSignDocuments.aspx', { alias: 'eSign', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
+    ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
+    ['Print2NCT.aspx', { alias: 'Print', }],
+    ['Scan.aspx', { alias: 'Scan' }],
+    ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
+    ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fsestlouis' }],
+    ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'ssestlouis' }],
+    ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'csestlouis' }],
+    ['ViewByMNsureEdition.aspx', { alias: 'MSE', subdomain: 'msestlouis' }],
+    // ['', { alias: '', }],
+    // ['', { alias: '', }],
+    // ['', { alias: '', }],
+]).get(thisPageName) ?? { alias: 'general' };
+mainBody.classList.add(page.alias, 'CaseWonks')
+const editionLocation = page.hasOwnProperty('subdomain') ? page.subdomain : document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.toLowerCase().replace(/\W/g, '') ?? "fsestlouis"
+
+const caseNumFormat = new Map([ ["FSE", "^\\d{1,8}$"], ["MSE", "^\\d{8}$"], ["CSE", "^\\d{10} ?\\d{2}$"] ]);
 const docTypeSwaps = [ // escapes need double slash //
     ["Notification - ", ""],
     // Form numbers //
@@ -194,26 +220,6 @@ const dateFuncs = {
         }
     },
 };
-const page = new Map([
-    ['AllItems.aspx', { alias: 'AllItems', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7' }],
-    ['DocBox.aspx', { alias: 'DocBox', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['DocumentDiscovery.aspx', { alias: 'DocDisc', primaryTableLoc: 'table[summary="Document Processing Center"]', }],
-    ['eSignDocuments.aspx', { alias: 'eSign', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
-    ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
-    ['Print2NCT.aspx', { alias: 'Print', }],
-    ['Scan.aspx', { alias: 'DocProps' }],
-    ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
-    ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    // ['', { alias: '', }],
-    // ['', { alias: '', }],
-    // ['', { alias: '', }],
-    // ['', { alias: '', }],
-]).get(thisPageName) ?? { alias: 'general' };
-mainBody.classList.add(page.alias, 'CaseWonks')
 const modifiedTables = [];
 
 const gbl = {
@@ -472,13 +478,13 @@ const caseData = (() => {
         if (!rowMap.size) { return };
         let existingAncestor = mainBody.querySelector('#scriptWPQ1')
         let existingTable = mainBody.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
-        const observer = new MutationObserver(async () => { // wait for old table to be destroyed //
+        const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
             if (existingTable.isConnected) { return };
-            observer.disconnect();
+            waitForOldTableToBeDestroyed.disconnect();
             await caseListTableAncestor() // wait for new table //
             checkForDuplicates(true)
         });
-        observer.observe(existingAncestor, { childList: true, subtree: true });
+        waitForOldTableToBeDestroyed.observe(existingAncestor, { childList: true, subtree: true });
     });
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
@@ -581,7 +587,8 @@ async function modifyDocumentTables(tableBody) {
     let title, name, uselessMenu, firstName, lastName, shortNote, caseLink, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed
     const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
         if (tr.querySelector('th')) { return };
-        if (["Home", "CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, caseLink, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
         if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, createdBy ] = tr.children };
         if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
@@ -592,12 +599,14 @@ async function modifyDocumentTables(tableBody) {
         if (["DocDisc"].includes(page.alias)) {
             hideNotificationRows(name, tr)
         };
+
         if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) };
         doModifications({ name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote, title, reviewed, caseLink, sortedByCaseNum, receivedDate })
     });
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
 };
+let selectedCaseNum;
 async function modifyDocumentTablesEFC(tableBody) {
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
@@ -686,7 +695,7 @@ function modifyShortNote(shortNote) {
     if (shortNote.textContent) { shortNote.title = shortNoteOrigText }
 };
 function modifyCaseLink(caseLink) {
-    if ( !caseLink || ["CaseFile"].includes(page.alias) || !(/^\d{1,10}$/).test(caseLink.textContent.trim()) ) { return };
+    if ( !caseLink || !(/^\d{1,10}$/).test(caseLink.textContent.trim()) ) { return };
     let caseNum = caseLink.textContent.trim().split(/^0/).reverse()[0]
     let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: caseNum, style: "cursor: pointer;" })
     caseLink.replaceWith(newLinkTd)
@@ -695,6 +704,14 @@ function modifyCaseLink(caseLink) {
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
         openCaseFile(newLinkA.textContent, "_blank")
+    });
+    let caseLinkRow = newLinkTd.closest('tr'), caseLinkTable = newLinkTd.closest('tbody')
+    caseLinkRow.classList.add(caseNum)
+    caseLinkRow.addEventListener('click', () => {
+        if (caseNum === selectedCaseNum) { return };
+        selectedCaseNum = caseNum
+        Array.from(caseLinkTable.querySelectorAll('.selectedCaseNumDocs'), tr => { tr.classList.remove('selectedCaseNumDocs') });
+        Array.from(document.getElementsByClassName(caseNum), tr => { tr.classList.add('selectedCaseNumDocs')} );
     });
 };
 function modifyTaxonomy(taxonomy) {
@@ -722,6 +739,7 @@ let primaryTableLoc, efcTableLoc
     if (!page.hasOwnProperty('primaryTableLoc')) { return };
     primaryTableLoc ??= tableLocQuery('primaryTableLoc')
     if (!primaryTableLoc) { return };
+    primaryTableLoc.classList.add('dpcTableLoc')
     primaryTableLoc.addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
     tbodLoadedEles(primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
     const observer = new MutationObserver(mutations => { tbodLoadedEles(primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
