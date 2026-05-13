@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.16
+// @version      0.0.17
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -27,6 +27,9 @@ const page = new Map([
     ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
     ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
     ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
+    ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"]', singleTable: 1 }],
+    ['author.aspx', { alias: 'Author',primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
+    ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet',primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
     ['Print2NCT.aspx', { alias: 'Print', }],
     ['Scan.aspx', { alias: 'Scan' }],
     ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
@@ -87,7 +90,7 @@ const docTypeSwaps = [ // escapes need double slash //
     ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
     // HC //
     ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
-    ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pop."],
+    ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
     ["Families with Children and Adults", "FCA"],
     ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
     ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
@@ -105,7 +108,7 @@ const docTypeSwaps = [ // escapes need double slash //
     // MSE //
     ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
     ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
-    // ["", ""],
+    ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
     // ["", ""],
     // ["", ""],
     // ["", ""],
@@ -632,12 +635,16 @@ async function mainTableVariables(tr) {
     } else if (editionCode === "mse") {
         if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, createdBy ] = tr.children };
-        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-        if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum ] = tr.children };
+        if (["DocBox", "Author", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy ] = tr.children };
+        if (["AllItems", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
+        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
+        // if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum ] = tr.children };
         if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, mnsureId, maxisNum,,,, taxonomy ] = tr.children };
-        if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
+        if (["DocDiscDPC", ].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, maxisNum, taxonomy, createdDate ] = tr.children };
+        if (["ViewbyDocSet", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["PendingStatus", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
+
     } else if (editionCode === "cse") {
     } else if (editionCode === "sse") {
     };
