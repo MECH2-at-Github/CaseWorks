@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.15
+// @version      0.0.16
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -40,9 +40,15 @@ const page = new Map([
     // ['', { alias: '', }],
 ]).get(thisPageName) ?? { alias: 'general' };
 mainBody.classList.add(page.alias, 'CaseWonks')
-const editionLocation = page.hasOwnProperty('subdomain') ? page.subdomain : document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.toLowerCase().replace(/\W/g, '') ?? "fsestlouis"
+const editionLocation = ( page.hasOwnProperty('subdomain') ? page.subdomain : document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.replace(/\W/g, '') ?? "fsestlouis" ).toLowerCase(), editionCode = editionLocation.slice(0, 3);
+const edition = new Map([
+    ['fse', { SOR: "MAXIS", caseNumFormat: new RegExp("^\\d{1,8}$"), notFound: "PRIV", }],
+    ['mse', { SOR: "MNSure", caseNumFormat: new RegExp("^\\d{8}$"), notFound: "Not Found", }],
+    ['cse', { SOR: "PRISM", caseNumFormat: new RegExp("^\\d{10} ?\\d{2}$"), notFound: "PRIV", }],
+    ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV", }]
+]).get(editionCode)
 
-const caseNumFormat = new Map([ ["FSE", "^\\d{1,8}$"], ["MSE", "^\\d{8}$"], ["CSE", "^\\d{10} ?\\d{2}$"] ]);
+// const caseNumFormat = new Map([ ["FSE", "^\\d{1,8}$"], ["MSE", "^\\d{8}$"], ["CSE", "^\\d{10} ?\\d{2}$"] ]);
 const docTypeSwaps = [ // escapes need double slash //
     ["Notification - ", ""],
     // Form numbers //
@@ -96,6 +102,10 @@ const docTypeSwaps = [ // escapes need double slash //
     ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six-Month Report", "Notice of late HRF, HCR, CSMR"],
     ["Signed Personal Statement about Assets for MFIP,DWP,GA,MSA, and GRH Programs", "Assets Statement form"],
 
+    // MSE //
+    ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
+    ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
+    // ["", ""],
     // ["", ""],
     // ["", ""],
     // ["", ""],
@@ -138,22 +148,24 @@ const theadSwaps = new Map([
     // ["", ""],
 ]);
 const patterns = {
-    byEmail: '(?:by [A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\s\xA0])?',
-    email: '[A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\s\xA0]',
+    byEmail: '(?:by [A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0])?',
+    email: '[A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0]',
     date: '[0-9]{1,2}\\/[0-9]{1,2}\\/[0-9]{1,4}',
     time: '[0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [AP]M',
-    phone: '[0-9]{10,11}'
+    phone: '[0-9]{10,11}',
+    faxAgain: '(?: [0-9]{3,4}-?[0-9]{3}-?[0-9]{4})?',
 };
 const shortNoteSwaps = [ // Assume the space after an email address is not a whitespace character and use [\s\xA0] instead. //
     ["[0-9]{10}_[A-Z0-9_]+_", ""], // MNB confirmation number //
     ["Item ID\\:[0-9]+ not found\\.", ""],
-    ["Moved from ([A-Z]{3} [A-Za-z. ]+) " + patterns.byEmail + " on (" + patterns.date + ") " + patterns.time + "\\.", "Moved: from $1 on $2"],
+    ["Moved from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmail + "on (" + patterns.date + ") " + patterns.time + "\\.", "Moved from $1 on $2"],
     ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmail + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time + "\\.", "Received via Portal $1."],
+    // Document was checked-in by System at 4/24/2026 10:06:06 AM.
     ["Public Portal - " + patterns.email + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", "Sent via Portal $1."],
     ["\\.Received via", ". Received via"],
     ["\\.Sent via", ". Sent via"],
-    ["\\*TO:[\s\xA0]*[+]?" + patterns.phone + " ", "."],
-    ["FROM:[\s\xA0]*(" + patterns.phone + ")", "Fax from $1"],
+    ["\\*TO:[\\s\\xA0]*[+]?" + patterns.phone + " ", ""],
+    ["FROM:[\\s\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain, "Fax from $1."],
     ["Auto-Copy from ([A-Z]{3})", "Auto-copy ($1)"],
     ["^Web$", ""],
     // ["", ""],
@@ -233,13 +245,22 @@ const gbl = {
         caseWonksVersion: createNewEle('div', { id: "caseWonksVersion", textContent: GM_info.script.name + ' v' + GM_info.script.version }),
     }
 };
-const caseData = (() => {
+const caseData = (() => { // used for case history and fixing page title // fse, mse correct //
     if (page.alias !== "CaseFile") { return };
     let caseIdNameEle = document.querySelector('h1:not(#pageTitle)') // mainBody.querySelector('#CaseFileHeaderStatus')?.previousElementSibling;
     if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
-    if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: "PRIV" } }
-    let splitCaseData = caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups
-    if (!editionLocation.includes("cse")) { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
+    if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: edition.notFound } }
+    let splitCaseData = (() => {
+        switch(editionCode) {
+            case "fse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups;
+            case "mse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseName>[A-Z'\-, ]+) \((?<caseNum>[0-9]{8})\)/i).groups;
+            case "cse": return { caseNum: undefined, caseName: undefined };
+            case "sse": return { caseNum: undefined, caseName: undefined };
+            default: return { caseNum: undefined, caseName: undefined };
+        };
+    })();
+    if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
+    if (!editionCode === "cse") { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
     let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
     caseNumEle.addEventListener('click', clickEvent => snackBar(clickEvent.target.textContent) )
     caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
@@ -355,11 +376,7 @@ const caseData = (() => {
                     });
                     gbl.eles.newTabField.addEventListener('keydown', keydownEvent => {
                         keydownEvent.stopImmediatePropagation()
-                        if (
-                            ( /[0-9]/.test(keydownEvent.key) && /^\d{0,12}$/.test(keydownEvent.target.value) )
-                            || ( keydownEvent.ctrlKey && ['v', 'a', 'x', 'c', 'z'].includes(keydownEvent.key) )
-                            || [ 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Home', 'End', 'Tab' ].includes(keydownEvent.key)
-                        ) { return };
+                        if ( (/(?:[0-9 ]|ArrowLeft|ArrowRight|Backspace|Delete|Home|End|Tab)/).test(keydownEvent.key) || ( keydownEvent.ctrlKey && ['v', 'a', 'x', 'c', 'z'].includes(keydownEvent.key) ) ) { return }; // valid keys, don't do anything //
                         switch (keydownEvent.key) {
                             case 'Enter': pageOpenNTF(keydownEvent); break;
                             case 'Escape': hideCaseHistory(); gbl.eles.newTabField.blur(); break;
@@ -403,6 +420,8 @@ const caseData = (() => {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////// PAGE_SPECIFIC SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+!function pageSpecificChanges() {
+try {
 !function AllItems() {
     if (page.alias !== "AllItems") { return };
     countDocs()
@@ -410,7 +429,7 @@ const caseData = (() => {
 }();
 !function CaseFile() {
     if (page.alias !== "CaseFile" || !caseData.caseNum) { return };
-    !function fixPageHeader() {
+    !function fixPageTitle() {
         document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
     }();
     setTimeout(() => { document.querySelector('li[aria-controls="DPC"][aria-selected="false"]')?.click() }, 300)
@@ -442,7 +461,7 @@ const caseData = (() => {
 }();
 !function HomePage() {
     if (page.alias !== "Home") { return };
-    !function shrinkHomePageMessage() { Array.from(mainBody.querySelector('.ms-rtestate-field > div')?.childNodes, node => { if (node.nodeName === "#text") { node.remove() } }) }();
+    !function shrinkHomePageMessage() { Array.from(mainBody.querySelector('.ms-rtestate-field > div')?.childNodes ?? [], node => { if (node.nodeName === "#text") { node.remove() } }) }();
 }();
 !async function Subs() {
     if (page.alias !== "Subs") { return };
@@ -482,7 +501,7 @@ const caseData = (() => {
             if (existingTable.isConnected) { return };
             waitForOldTableToBeDestroyed.disconnect();
             await caseListTableAncestor() // wait for new table //
-            checkForDuplicates(true)
+            checkForDuplicateSubs(true)
         });
         waitForOldTableToBeDestroyed.observe(existingAncestor, { childList: true, subtree: true });
     });
@@ -492,7 +511,7 @@ const caseData = (() => {
             case "Stop": return tr?.children[3];
         };
     };
-    async function checkForDuplicates(followWithOkEvent) {
+    async function checkForDuplicateSubs(followWithOkEvent) {
         const caseListTrs = await Array.from( (await caseListTableAncestor())?.querySelectorAll('tbody tr') )
         const editMode = editLinkLocator().textContent
         const [uniques, duplicates] = (function() {
@@ -522,7 +541,7 @@ const caseData = (() => {
 
     compareOpenButton.addEventListener('click', () => {
         compareDialog.showModal()
-        checkForDuplicates()
+        checkForDuplicateSubs()
     });
     compareResetButton.addEventListener('click', () => {
         Array.from( mainBody.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
@@ -564,7 +583,8 @@ async function countDocs() {
 };
 // Scan, Subscription:
 // 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
-
+} catch(err) { console.info(err) };
+}();
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ PAGE_SPECIFIC SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
@@ -577,31 +597,79 @@ async function countDocs() {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // ////////////////////////////////////////////////////////////////////////////// TABLE_FUNCTIONS SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-
+// if (editionCode === "fse") {
+// } else if (editionCode === "mse") {
+// } else if (editionCode === "cse") {
+// } else if (editionCode === "sse") {
+// };
+// editionCode === "fse" ? ''
+// : editionCode === "mse" ? ''
+// : editionCode === "cse" ? ''
+// : editionCode === "sse" ? ''
+// : ''
+// let x = (() => {
+//     switch(editionCode) {
+//         case "fse": return;
+//         case "mse": return;
+//         case "cse": return;
+//         case "sse": return;
+//         default: return {};
+//     }
+// })();
 const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); snackBar(clickEvent.target.previousElementSibling?.textContent, "Copied", true); clickEvent.target.style.filter = 'invert(1)'; }, })
 let lastCaseNum = ""
+async function mainTableVariables(tr) {
+    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
+    if (editionCode === "fse") {
+        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, createdBy ] = tr.children };
+        if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
+        if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum ] = tr.children };
+        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,,, taxonomy ] = tr.children };
+        if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
+    } else if (editionCode === "mse") {
+        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+        if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, createdBy ] = tr.children };
+        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
+        if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum ] = tr.children };
+        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, mnsureId, maxisNum,,,, taxonomy ] = tr.children };
+        if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
+    } else if (editionCode === "cse") {
+    } else if (editionCode === "sse") {
+    };
+    return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId };
+};
+async function subTableVariables(tr) {
+    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
+    if (editionCode === "fse") {
+        [ ,, title, name, uselessMenu, firstName, lastName, shortNote,, createdDate, receivedDate, modifiedDate ] = tr.children
+    } else if (editionCode === "mse") {
+        [ ,, title, name, uselessMenu, firstName, lastName, shortNote,,,, createdDate, receivedDate, modifiedDate ] = tr.children
+    } else if (editionCode === "cse") {
+    } else if (editionCode === "sse") {
+    };
+    return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId };
+};
 async function modifyDocumentTables(tableBody) {
     let sortedByCaseNum = tableBody?.closest('table')?.querySelector('.ms-headerSortTitleLink:has(+span:not([style="display: none;"]))')?.textContent === "MAXIS" ?? false
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
-    let title, name, uselessMenu, firstName, lastName, shortNote, caseLink, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed
     const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
-        if (tr.querySelector('th')) { return };
-        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, caseLink, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-        if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, createdBy ] = tr.children };
-        if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, caseLink, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, caseLink ] = tr.children };
-        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, caseLink,,,, taxonomy ] = tr.children };
-        if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
+        !async function fetchVarsThenDoModifications() {
+            if (tr.querySelector('th')) { return };
+            mainTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
+                if (["DocDisc"].includes(page.alias)) {
+                    hideNotificationRows(name, tr)
+                };
 
-        if (["DocDisc"].includes(page.alias)) {
-            hideNotificationRows(name, tr)
-        };
-
-        if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) };
-        doModifications({ name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote, title, reviewed, caseLink, sortedByCaseNum, receivedDate })
+                if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) };
+                doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, maxisNum, intCase, mnsureId })
+            });
+        }();
     });
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
@@ -610,10 +678,14 @@ let selectedCaseNum;
 async function modifyDocumentTablesEFC(tableBody) {
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
-    let title, name, uselessMenu, firstName, lastName, shortNote, caseLink, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, sortedByCaseNum
+    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, sortedByCaseNum
     const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
-        [ ,, title, name, uselessMenu, firstName, lastName, shortNote,, createdDate, receivedDate, modifiedDate ] = tr.children
-        doModifications({ title, name, shortNote, createdDate, receivedDate, modifiedDate })
+        !async function fetchVarsThenDoModifications() {
+            if (tr.querySelector('th')) { return };
+            subTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
+                doModifications({ title, name, shortNote, createdDate, receivedDate, modifiedDate })
+            });
+        }();
     });
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
@@ -624,12 +696,12 @@ function hideNotificationRows(name, tr) {
     if (name?.textContent?.indexOf("Notif") !== 0) { return };
     tr.classList.add('toggleHidden')
 };
-function groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) {
-    if (!caseLink) { return lastCaseNum };
+function groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) {
+    if (!maxisNum) { return lastCaseNum };
     switch(lastCaseNum) {
-        case "": { lastCaseNum = caseLink?.textContent; break; }
-        case caseLink?.textContent: { break; }
-        default: { tr.classList.add('tdBorderTop'); lastCaseNum = caseLink?.textContent; break; }
+        case "": { lastCaseNum = maxisNum?.textContent; break; }
+        case maxisNum?.textContent: { break; }
+        default: { tr.classList.add('tdBorderTop'); lastCaseNum = maxisNum?.textContent; break; }
     };
     return lastCaseNum
 };
@@ -641,12 +713,16 @@ function groupByCaseNumIfSorted(tableBody, lastCaseNum, caseLink, tr) {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////////// MODIFICATIONS START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-function doModifications({ name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote='', title, reviewed, caseLink, sortedByCaseNum='', receivedDate }={}) {
+function doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, maxisNum, intCase, mnsureId, }={}) {
+// function doModifications({ name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote='', title, reviewed, maxisNum, sortedByCaseNum='', receivedDate }={}) {
     modifyReviewed(reviewed)
     modifyTitles(title, shortNote)
     modifyName(name)
     modifyShortNote(shortNote)
-    modifyCaseLink(caseLink, sortedByCaseNum)
+    switch(editionCode) {
+        case "fse": modifyCaseNum(maxisNum); break;
+        case "mse": modifyCaseNum(intCase); break;
+    }
     modifyTaxonomy(taxonomy)
     modifyDate(createdDate)
     modifyDate(modifiedDate)
@@ -694,23 +770,23 @@ function modifyShortNote(shortNote) {
     shortNoteSwaps.forEach( ([regX, swap]) => { shortNote.textContent = shortNote.textContent.replace(new RegExp(regX, "i"), swap) });
     if (shortNote.textContent) { shortNote.title = shortNoteOrigText }
 };
-function modifyCaseLink(caseLink) {
-    if ( !caseLink || !(/^\d{1,10}$/).test(caseLink.textContent.trim()) ) { return };
-    let caseNum = caseLink.textContent.trim().split(/^0/).reverse()[0]
+function modifyCaseNum(maxisNum) {
+    if ( !maxisNum || !(/^\d{1,10}$/).test(maxisNum.textContent.trim()) ) { return };
+    let caseNum = maxisNum.textContent.trim().split(/^0/).reverse()[0]
     let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: caseNum, style: "cursor: pointer;" })
-    caseLink.replaceWith(newLinkTd)
+    maxisNum.replaceWith(newLinkTd)
     newLinkTd.append(newLinkA, copySymbol())
     newLinkA?.addEventListener('click', () => { openCaseFile(newLinkA.textContent, "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
         openCaseFile(newLinkA.textContent, "_blank")
     });
-    let caseLinkRow = newLinkTd.closest('tr'), caseLinkTable = newLinkTd.closest('tbody')
-    caseLinkRow.classList.add(caseNum)
-    caseLinkRow.addEventListener('click', () => {
+    let maxisNumRow = newLinkTd.closest('tr'), maxisNumTable = newLinkTd.closest('tbody')
+    maxisNumRow.classList.add(caseNum)
+    maxisNumRow.addEventListener('click', () => {
         if (caseNum === selectedCaseNum) { return };
         selectedCaseNum = caseNum
-        Array.from(caseLinkTable.querySelectorAll('.selectedCaseNumDocs'), tr => { tr.classList.remove('selectedCaseNumDocs') });
+        Array.from(maxisNumTable.querySelectorAll('.selectedCaseNumDocs'), tr => { tr.classList.remove('selectedCaseNumDocs') });
         Array.from(document.getElementsByClassName(caseNum), tr => { tr.classList.add('selectedCaseNumDocs')} );
     });
 };
@@ -757,15 +833,14 @@ let primaryTableLoc, efcTableLoc
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-
 function openCaseFile(openCaseFileNum, target) {
     openCaseFileNum = openCaseFileNum.trim()
     if (!openCaseFileNum || !(/^\d{1,10}$/).test(openCaseFileNum)) { return };
     copy(openCaseFileNum)
-    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
+    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=" + edition.SOR, target)
+    // window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
 };
-function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (/^\d{1,8}$|^\d{12}$/).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
-// function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (/(?:^\d{1,8}$|^\d{12}$)/).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
+function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (edition.caseNumFormat).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
 function navToCaseFileNTF() {
     let caseFileNumber = testCaseNum(gbl.eles.newTabField.value)
     if (!caseFileNumber) { return undefined };
@@ -835,8 +910,6 @@ function snackBar(sbText, title="Copied!", doCopy=true) {
     };
     title !== "notitle" && snackBarDivs.container.appendChild( snackBarDivs.title )
     snackBarDivs.container.append( snackBarDivs.style, snackBarDivs.textarea )
-    // let sbTextSpans = sbText.split('\n').map( textLine => createNewEle('span', { textContent: textLine }) )
-    // snackBarDivs.textarea.append( ...sbTextSpans )
     snackBarDivs.textarea.append( ...sbText.split('\n').map( textLine => createNewEle('span', { textContent: textLine }) ) )
     mainBody.appendChild(snackBarDivs.container)
     doCopy && copy(snackBarDivs.textarea.textContent)
