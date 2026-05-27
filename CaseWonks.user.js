@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.18
+// @version      0.0.19
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -51,7 +51,6 @@ const edition = new Map([
     ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV", }]
 ]).get(editionCode)
 
-// const caseNumFormat = new Map([ ["FSE", "^\\d{1,8}$"], ["MSE", "^\\d{8}$"], ["CSE", "^\\d{10} ?\\d{2}$"] ]);
 const docTypeSwaps = [ // escapes need double slash "\\" // characters needing escapes: .?()[]/\ //
     ["Notification - ", ""],
     // Form numbers //
@@ -484,14 +483,16 @@ try {
           compareOkButton = createNewEle('button', { textContent: "OK" }),
           compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
           compareContainer = createNewEle('div', { style: "max-width: 200px; display: none; position: fixed; right: 5vw; top: 15vh; flex-direction: column; gap: 10px;" }),
-          dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div'),
+          dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div', { style: "margin-left: 5px;"}),
+          colorCoding = createNewEle('div', { textContent: "Color legend:"}),
           uniqueCases = createNewEle('div'), matchedCount = createNewEle('div'),
-          compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:", style: "display: none;" }),
-          compareMissingList = createNewEle('div')
+          compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:" }),
+          compareMissingList = createNewEle('div', { style: "margin-left: 5px;"})
+
     gbl.eles.navContainer.append( ...arrangeElements( [createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ]]) )
     mainBody.append(
         ...arrangeElements(
-            [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } .compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" }),
+            [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
              compareDialog,
              [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
               compareTextarea,
@@ -501,72 +502,64 @@ try {
               ],
              ],
              compareContainer,
-             [dupeCaseContainer,
-              [dupeCaseList
+             [colorCoding,
+              [createNewEle('div', { style: "margin-left: 5px; font-weight: 550;" }),
+               [createNewEle('div', { classList: 'compareMatch', textContent: 'Case # Found' }),
+                createNewEle('div', { classList: 'duplicateMatch', textContent: 'Duplicate Entry' }),
+                createNewEle('div', { classList: 'newEntry', textContent: 'Newer Entry' }),
+                createNewEle('div', { textContent: 'Not matched' })
+               ],
+              ],
+              dupeCaseContainer,
+              [dupeCaseList,
               ],
               uniqueCases,
               matchedCount,
               compareMissingContainer,
-              [compareMissingList
+              [compareMissingList,
               ],
              ],
             ])
     );
 
-    let caseListTableAncestor = async () => await waitForTableCells(document.querySelector('#scriptWPQ1'))
+    let today = Date.now()
+    const tableAncestorLocator = async () => await waitForTableCells(mainBody.querySelector('#scriptWPQ1'))
+    let tableAncestor = await tableAncestorLocator()
+    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"] > tbody'))
+    let existingTable = await tableLocator()
     const rowMap = new Map()
-    const editLinkLocator = () => document.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')
-    const editLink = editLinkLocator()
-    const existingAncestor = mainBody.querySelector('#scriptWPQ1')
-    let existingTable = existingAncestor.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
-    let mutationObserverActive
-        const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
-            if (existingTable.isConnected) { return };
-            await caseListTableAncestor() // wait for new table //
-            existingTable = existingAncestor.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
-            modifyDocumentTables(existingTable)
-            if (!rowMap.size) { return };
-            checkForDuplicateSubs(true)
-        });
-        waitForOldTableToBeDestroyed.observe(existingAncestor, { childList: true, subtree: true });
+    const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()
+    const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
+        if (existingTable.isConnected) { return };
+        existingTable = await tableLocator()
+        modifyDocumentTables(existingTable)
+        if (!rowMap.size) { return };
+        checkForDuplicateSubs(true)
+    });
+    waitForOldTableToBeDestroyed.observe(tableAncestor, { childList: true, subtree: true });
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
-            case "edit": return tr?.children[4];
-            case "Stop": return tr?.children[3];
+            case "EDIT": return { caseIdNum: tr?.children[4]?.textContent?.trim(), entryDate: tr?.children[6]?.textContent?.trim() };
+            case "STOP": return { caseIdNum: tr?.children[3]?.textContent?.trim(), entryDate: tr?.children[5]?.textContent?.trim() };
         };
     };
     async function checkForDuplicateSubs(followWithOkEvent) {
-        const caseListTrs = await Array.from( (await caseListTableAncestor())?.querySelectorAll('tbody tr') )
-        const editMode = editLinkLocator().textContent
-        let [uniques, duplicates] = (function() {
-            rowMap.clear()
-            const uniqueSet = new Set()
-            const caseList = caseListTrs.map(tr => {
-                let caseIdTd = setVarsBasedOnEditMode(editMode, tr)
-                let caseIdNum = caseIdTd?.textContent?.trim()
-                if ( !(/^\d+$/).test(caseIdNum) ) { return [] };
-                rowMap.set(caseIdNum, tr)
-                return caseIdNum;
-            }).filter(e => e.length);
-            const duplicateList = caseList?.map(caseIdNum => {
-                if (!caseIdNum) { return false };
-                if ( uniqueSet?.has(caseIdNum) ) { return caseIdNum };
-                uniqueSet?.add(caseIdNum);
-                return false;
-            }).filter(e => e);
-            return [uniqueSet, duplicateList]
-        })();
         dupeCaseList.replaceChildren()
-        dupeCaseContainer.textContent = "Duplicate List:"
-        if (!duplicates.length) { dupeCaseContainer.textContent += " Ø" }
-        else {
-            duplicates.forEach(caseIdNum => {
-                rowMap.get(String(caseIdNum))?.classList.add('duplicateMatch')
-            });
-            dupeCaseList.append(...duplicates.map(caseIdNum => createNewEle('div', { textContent: caseIdNum }) ))
-        };
+        const caseListTrs = Array.from( existingTable?.querySelectorAll('tr') )
+        const editMode = editLinkText()
+        rowMap.clear()
+        caseListTrs.forEach(tr => {
+            let caseIdNum = setVarsBasedOnEditMode(editMode, tr).caseIdNum
+            if (!testCaseNum(caseIdNum)) { return };
+            if (rowMap.has(caseIdNum)) {
+                tr.classList.add('duplicateMatch')
+                dupeCaseList.append( createNewEle('div', { textContent: caseIdNum }) )
+                return;
+            };
+            rowMap.set(caseIdNum, tr)
+        });
 
-        uniqueCases.textContent = "Unique Count: " + uniques.size
+        uniqueCases.textContent = "Unique Count: " + rowMap.size
         compareContainer.style.display = "flex"
         if (followWithOkEvent) { okEvent() };
     };
@@ -574,21 +567,20 @@ try {
     compareOpenButton.addEventListener('click', () => {
         compareDialog.showModal()
         checkForDuplicateSubs()
+        compareResetButton.style.display = "block"
     });
     compareResetButton.addEventListener('click', () => {
-        Array.from( mainBody.querySelectorAll('.duplicateMatch'), ele => ele.classList.remove('duplicateMatch') );
-        Array.from( mainBody.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
+        Array.from( existingTable.querySelectorAll('.duplicateMatch'), ele => ele.classList.remove('duplicateMatch') );
+        Array.from( existingTable.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
         compareMissingList.replaceChildren()
-        dupeCaseList.replaceChildren(); dupeCaseContainer.textContent = "Duplicate List:"
+        dupeCaseList.replaceChildren();
         compareResetButton.style.display = "none"
         compareContainer.style.display = "none"
-        compareMissingContainer.style.display = "none"
-        uniqueCases.textContent = ""
         matchedCount.textContent = ""
         rowMap.clear()
     });
     function okEvent() {
-        if (!compareTextarea?.value) { return };
+        if (!compareTextarea?.value) { compareDialog.close(); return };
         if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
         let missingNumbers = []
         let userCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
@@ -601,11 +593,15 @@ try {
             matchedRow?.classList.add('compareMatch')
         });
         compareDialog.close()
-        compareResetButton.style.display = "block"
-        compareMissingContainer.style.display = "block"
         compareMissingList.replaceChildren()
         compareMissingList.append(...missingNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
         matchedCount.textContent = "Match Count: " + (userCaseList.length - missingNumbers.length) + '/' + userCaseList.length
+        const editMode = editLinkText()
+        Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch)'), tr => {
+            let entryDate = Date.parse(setVarsBasedOnEditMode(editMode, tr).entryDate)
+            if ((today - entryDate) < 2592000000) { tr.classList.add('newEntry') }; // less than 30 days
+        });
+
     };
     compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
     compareOkButton.addEventListener('click', okEvent);
@@ -667,8 +663,13 @@ async function mainTableVariables(tr) {
         if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
         if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum ] = tr.children };
-        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,, birthDate, taxonomy ] = tr.children };
-        if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
+        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children };
+        if (["Subs"].includes(page.alias)) {
+            switch(mainBody.querySelector('#scriptWPQ1 #Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()) {
+                case "EDIT": [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+                case "STOP": [,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+            };
+        };
     } else if (editionCode === "mse") {
         if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
@@ -685,9 +686,9 @@ async function mainTableVariables(tr) {
     } else if (editionCode === "cse") {
     } else if (editionCode === "sse") {
     };
-    return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId };
+    return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId };
 };
-async function subTableVariables(tr) {
+async function efcTableVariables(tr) {
     let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
     if (editionCode === "fse") {
         [ ,, title, name, uselessMenu, firstName, lastName, shortNote,, createdDate, receivedDate, modifiedDate ] = tr.children
@@ -706,10 +707,7 @@ async function modifyDocumentTables(tableBody) {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
             mainTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
-                if (["DocDisc"].includes(page.alias)) {
-                    hideNotificationRows(name, tr)
-                };
-
+                if (["DocDisc"].includes(page.alias)) { hideNotificationRows(name, tr) };
                 if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) };
                 doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, maxisNum, intCase, mnsureId })
             });
@@ -722,11 +720,11 @@ let selectedCaseNum;
 async function modifyDocumentTablesEFC(tableBody) {
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
-    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, sortedByCaseNum
+    // let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, sortedByCaseNum
     const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
-            subTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
+            efcTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
                 doModifications({ title, name, shortNote, createdDate, receivedDate, modifiedDate })
             });
         }();
@@ -736,8 +734,7 @@ async function modifyDocumentTablesEFC(tableBody) {
 };
 function modifyTableHeaders(tableBody) { Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent }) };
 function hideNotificationRows(name, tr) {
-    if (!name) { return };
-    if (name?.textContent?.indexOf("Notif") !== 0) { return };
+    if (!name || name?.textContent?.indexOf("Notif") !== 0) { return };
     tr.classList.add('toggleHidden')
 };
 function groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) {
@@ -772,11 +769,11 @@ function doModifications({ title, name, firstName, lastName, shortNote, docBox, 
     let nameModifications = [createdBy, modifiedBy].forEach(modifyCreatedModifiedBy)
 };
 function modifyReviewed(reviewed) {
-    if (!reviewed) { return };
+    if (!reviewed || !reviewed?.textContent) { return };
     reviewed.textContent = reviewed.textContent === "Yes" ? "✓" : "" // ✓ ✕ ☐ ☒ ☑
 };
 function modifyTitles(title, shortNote) {
-    if (!title) { return };
+    if (!title || !title?.textContent) { return };
     let titleOrigText = title.textContent
     let titleRegExText = title.textContent
     function modifyBadTitle() {
@@ -799,19 +796,19 @@ function replaceChildrenSpan(td, {title, textContent}={}) {
     td.replaceChildren( createNewEle('span', { title, textContent }) )
 };
 function modifyName(name) {
-    if (!name) { return };
+    if (!name || !name?.textContent) { return };
     let nameA = name.querySelector('a')
     let nameNewText = nameA.textContent.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,6})_[0-9-]+/)?.groups?.filenum
     nameA.textContent = "(view_" + (nameNewText ?? "item") + ")"
 };
 function modifyShortNote(shortNote) {
-    if (!shortNote || !shortNote.textContent) { return };
+    if (!shortNote || !shortNote?.textContent) { return };
     let shortNoteOrigText = shortNote.textContent
     shortNoteSwaps.forEach( ([regX, swap]) => { shortNote.textContent = shortNote.textContent.replace(new RegExp(regX, "i"), swap) });
     if (shortNote.textContent) { shortNote.title = shortNoteOrigText }
 };
 function modifyCaseNum(maxisNum) {
-    if ( !maxisNum || !(/^\d{1,10}$/).test(maxisNum.textContent.trim()) ) { return };
+    if ( !maxisNum || !testCaseNum(maxisNum?.textContent?.trim()) ) { return };
     let caseNum = maxisNum.textContent.trim().split(/^0/).reverse()[0]
     let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: caseNum, style: "cursor: pointer;" })
     maxisNum.replaceWith(newLinkTd)
@@ -831,19 +828,20 @@ function modifyCaseNum(maxisNum) {
     });
 };
 function modifyTaxonomy(taxonomy) {
-    if (!taxonomy) { return };
+    if (!taxonomy || !taxonomy?.textContent) { return };
     let newTaxonomy = taxonomy.textContent.replace(/^([0-9.]+) ([A-Z]{2,4}) - /g, '$1: $2 ')
     newTaxonomy = getTaxSwap(newTaxonomy.split(':')[0]) ?? newTaxonomy
     taxonomy.textContent = newTaxonomy
 };
 function getTaxSwap(taxonomyNumber) { return taxonomySwaps.get(taxonomyNumber) ?? undefined };
 function modifyDate(originalDate) {
-    if (!originalDate) { return };
-    let dateSpan = originalDate.querySelector('span')
-    dateSpan.textContent = originalDate.textContent.split(' ')[0].replace(/\d{2}(\d{2})$/, '$1')
+    if (!originalDate || !originalDate.textContent) { return };
+    let dateSpan = originalDate.querySelector('span') || originalDate
+    dateSpan.textContent = new Date(originalDate.textContent.split(' ')[0]).toLocaleDateString(undefined, { year: "2-digit", month: "numeric", day: "numeric" })
+    // dateSpan.textContent = originalDate.textContent.split(' ')[0].replace(/\d{2}(\d{2})$/, '$1')
 };
 function modifyCreatedModifiedBy(createdModifiedBy) {
-    if (!createdModifiedBy) { return };
+    if (!createdModifiedBy || !createdModifiedBy?.textContent) { return };
     createdModifiedBy.title = createdModifiedBy.textContent
     createdModifiedBy.textContent = createdModifiedBy.textContent.split(/[@ ]/)[0]
 };
@@ -875,12 +873,12 @@ let primaryTableLoc, efcTableLoc
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 function openCaseFile(openCaseFileNum, target) {
     openCaseFileNum = openCaseFileNum.trim()
-    if (!openCaseFileNum || !(/^\d{1,10}$/).test(openCaseFileNum)) { return };
+    if (!testCaseNum(openCaseFileNum)) { return };
     copy(openCaseFileNum)
     window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=" + edition.SOR, target)
     // window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
 };
-function testCaseNum(caseNumber) { caseNumber = caseNumber.replace(/\s/g, ''); return (edition.caseNumFormat).test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
+function testCaseNum(caseNumber) { caseNumber = caseNumber?.replace(/\s/g, ''); return (edition.caseNumFormat)?.test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
 function navToCaseFileNTF() {
     let caseFileNumber = testCaseNum(gbl.eles.newTabField.value)
     if (!caseFileNumber) { return undefined };
