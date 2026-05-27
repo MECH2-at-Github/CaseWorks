@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.17
+// @version      0.0.18
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -52,7 +52,7 @@ const edition = new Map([
 ]).get(editionCode)
 
 // const caseNumFormat = new Map([ ["FSE", "^\\d{1,8}$"], ["MSE", "^\\d{8}$"], ["CSE", "^\\d{10} ?\\d{2}$"] ]);
-const docTypeSwaps = [ // escapes need double slash //
+const docTypeSwaps = [ // escapes need double slash "\\" // characters needing escapes: .?()[]/\ //
     ["Notification - ", ""],
     // Form numbers //
     ["^FSE[0-9]{1,3}[A-Z]? ", ""],
@@ -78,7 +78,8 @@ const docTypeSwaps = [ // escapes need double slash //
     ["Shelter\\/Residence Verification", "Residence"],
     ["Social Security", "SS"],
 
-     // CCAP //
+    //// FSE ////
+    // CCAP //
     ["(?:Minnesota )?Child Care Assistance( Program)?(?: \\(CCAP\\))?", "CCAP"],
     ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
     ["Redetermination Form", "Redetermination"],
@@ -88,14 +89,22 @@ const docTypeSwaps = [ // escapes need double slash //
     ["Cooperation with Child Support Enforcement", "CS Good Cause"],
     ["Referral to Support and Collections", "CS Referral"],
     ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
+    // Fraud //
+    ["Fraud Prevention Investigation Referral", "FPI Referral"],
     // HC //
     ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
+    ["HC Application for Certain Populations", "HC App for Certain Pops"],
     ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
+    ["Determination of Cost Effectiveness", "Determination of CEHI"],
     ["Families with Children and Adults", "FCA"],
     ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
     ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
     ["New Household Member or Applicant Request Form", "HC: New HH Member/Applicant Request"],
     ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC"],
+    // FNW //
+    ["General Assistance Verifying Participation in Substance Use Disorder Treatment", "GA Verifying Partic. in SUD Treatment"],
+    ["Interim Assistance Authorization \\(non-SSI\\)", "Non-SSI Interim Assist. Auth"],
+    ["SSI Interim Assistance Authorization", "SSI Interim Assist. Auth"],
     // LTC //
     ["Lead Agency Assessor/Case Manager/Worker LTC Communication Form", "LTC Communication Form"],
     // SNAP/Cash //
@@ -109,7 +118,6 @@ const docTypeSwaps = [ // escapes need double slash //
     ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
     ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
     ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
-    // ["", ""],
     // ["", ""],
     // ["", ""],
     // ["", ""],
@@ -263,7 +271,7 @@ const caseData = (() => { // used for case history and fixing page title // fse,
         };
     })();
     if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
-    if (!editionCode === "cse") { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
+    if (editionCode !== "cse") { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
     let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
     caseNumEle.addEventListener('click', clickEvent => snackBar(clickEvent.target.textContent) )
     caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
@@ -469,26 +477,39 @@ try {
 !async function Subs() {
     if (page.alias !== "Subs") { return };
 
-    const dupeCases = createNewEle('div'), uniqueCases = createNewEle('div'), matchedCount = createNewEle('div')
     const compareOpenButton = createNewEle('button', { textContent: "Compare" }),
           compareResetButton = createNewEle('button', { textContent: "Reset", style: "display: none;" }),
-          compareDialog = createNewEle('dialog'),
-          compareTextarea = createNewEle('textarea', { style: "height: 20vh;", id: "compareTextarea" }),
+          compareDialog = createNewEle('dialog', { id: "compareDialog" }),
+          compareTextarea = createNewEle('textarea', { id: "compareTextarea" }),
           compareOkButton = createNewEle('button', { textContent: "OK" }),
           compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
-          compareUnmatched = createNewEle('div', { textContent: "Unmatched Case Numbers:", style: "display: none; position: fixed; right: 5vw; top: 15vh;" })
-    gbl.eles.navContainer.append( ...arrangeElements([createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ]]), dupeCases, uniqueCases, matchedCount )
+          compareContainer = createNewEle('div', { style: "max-width: 200px; display: none; position: fixed; right: 5vw; top: 15vh; flex-direction: column; gap: 10px;" }),
+          dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div'),
+          uniqueCases = createNewEle('div'), matchedCount = createNewEle('div'),
+          compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:", style: "display: none;" }),
+          compareMissingList = createNewEle('div')
+    gbl.eles.navContainer.append( ...arrangeElements( [createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ]]) )
     mainBody.append(
         ...arrangeElements(
-            [compareDialog,
+            [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } .compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" }),
+             compareDialog,
              [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
               compareTextarea,
-              createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center;" }),
+              createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center; margin-top: 15px;" }),
               [compareOkButton,
-               compareCancelButton]
+               compareCancelButton
+              ],
              ],
-             compareUnmatched,
-             createNewEle('style', { textContent: "dialog[open] { display: flex; flex-direction: column; gap: 10px; width: 400px; } .compareMatch * { color: light-dark(#A94D15, #ffa700) !important; } .duplicateMatch * { color: #CC0000 !important; }" }),
+             compareContainer,
+             [dupeCaseContainer,
+              [dupeCaseList
+              ],
+              uniqueCases,
+              matchedCount,
+              compareMissingContainer,
+              [compareMissingList
+              ],
+             ],
             ])
     );
 
@@ -496,18 +517,18 @@ try {
     const rowMap = new Map()
     const editLinkLocator = () => document.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')
     const editLink = editLinkLocator()
-    editLink.addEventListener('click', async clickEvent => {
-        if (!rowMap.size) { return };
-        let existingAncestor = mainBody.querySelector('#scriptWPQ1')
-        let existingTable = mainBody.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
+    const existingAncestor = mainBody.querySelector('#scriptWPQ1')
+    let existingTable = existingAncestor.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
+    let mutationObserverActive
         const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
             if (existingTable.isConnected) { return };
-            waitForOldTableToBeDestroyed.disconnect();
             await caseListTableAncestor() // wait for new table //
+            existingTable = existingAncestor.querySelector('#scriptWPQ1 table[summary="Subscription"] > tbody')
+            modifyDocumentTables(existingTable)
+            if (!rowMap.size) { return };
             checkForDuplicateSubs(true)
         });
         waitForOldTableToBeDestroyed.observe(existingAncestor, { childList: true, subtree: true });
-    });
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
             case "edit": return tr?.children[4];
@@ -517,7 +538,7 @@ try {
     async function checkForDuplicateSubs(followWithOkEvent) {
         const caseListTrs = await Array.from( (await caseListTableAncestor())?.querySelectorAll('tbody tr') )
         const editMode = editLinkLocator().textContent
-        const [uniques, duplicates] = (function() {
+        let [uniques, duplicates] = (function() {
             rowMap.clear()
             const uniqueSet = new Set()
             const caseList = caseListTrs.map(tr => {
@@ -535,10 +556,18 @@ try {
             }).filter(e => e);
             return [uniqueSet, duplicateList]
         })();
-        if (duplicates.length === 0) { duplicates.push("None found") }
-        else { duplicates.forEach(caseIdNum => { rowMap.get(caseIdNum).classList.add('duplicateMatch') }) };
-        dupeCases.textContent = "Duplicate Cases: " + duplicates.join(', ')
+        dupeCaseList.replaceChildren()
+        dupeCaseContainer.textContent = "Duplicate List:"
+        if (!duplicates.length) { dupeCaseContainer.textContent += " Ø" }
+        else {
+            duplicates.forEach(caseIdNum => {
+                rowMap.get(String(caseIdNum))?.classList.add('duplicateMatch')
+            });
+            dupeCaseList.append(...duplicates.map(caseIdNum => createNewEle('div', { textContent: caseIdNum }) ))
+        };
+
         uniqueCases.textContent = "Unique Count: " + uniques.size
+        compareContainer.style.display = "flex"
         if (followWithOkEvent) { okEvent() };
     };
 
@@ -547,32 +576,36 @@ try {
         checkForDuplicateSubs()
     });
     compareResetButton.addEventListener('click', () => {
+        Array.from( mainBody.querySelectorAll('.duplicateMatch'), ele => ele.classList.remove('duplicateMatch') );
         Array.from( mainBody.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
+        compareMissingList.replaceChildren()
+        dupeCaseList.replaceChildren(); dupeCaseContainer.textContent = "Duplicate List:"
         compareResetButton.style.display = "none"
-        compareUnmatched.style.display = "none"
-        dupeCases.textContent = ""
+        compareContainer.style.display = "none"
+        compareMissingContainer.style.display = "none"
         uniqueCases.textContent = ""
         matchedCount.textContent = ""
+        rowMap.clear()
     });
     function okEvent() {
         if (!compareTextarea?.value) { return };
         if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
-        let unmatchedNumbers = []
+        let missingNumbers = []
         let userCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
         userCaseList.forEach(caseNum => {
             let matchedRow = rowMap.get(caseNum)
             if (!matchedRow) {
-                unmatchedNumbers.push(caseNum)
+                missingNumbers.push(caseNum)
                 return;
             };
             matchedRow?.classList.add('compareMatch')
         });
         compareDialog.close()
         compareResetButton.style.display = "block"
-        Array.from(compareUnmatched.querySelectorAll('div'), ele => ele.remove())
-        compareUnmatched.append(...unmatchedNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
-        compareUnmatched.style.display = "block"
-        matchedCount.textContent = "Match Count: " + (userCaseList.length - unmatchedNumbers.length) + '/' + userCaseList.length
+        compareMissingContainer.style.display = "block"
+        compareMissingList.replaceChildren()
+        compareMissingList.append(...missingNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
+        matchedCount.textContent = "Match Count: " + (userCaseList.length - missingNumbers.length) + '/' + userCaseList.length
     };
     compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
     compareOkButton.addEventListener('click', okEvent);
@@ -596,6 +629,10 @@ async function countDocs() {
 // 		Add buttons with stock text to be entered in textarea#InstructionstoClient, such as:
 // 			The Referral to Support and Collections form is required to be completed for CCAP eligibility.
 // 			The Client Statement of Good Cause form is only required if you wish to make a good cause claim for not cooperating with child support for reasons listed on the form.
+
+
+
+
 
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
@@ -622,7 +659,7 @@ async function countDocs() {
 const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); snackBar(clickEvent.target.previousElementSibling?.textContent, "Copied", true); clickEvent.target.style.filter = 'invert(1)'; }, })
 let lastCaseNum = ""
 async function mainTableVariables(tr) {
-    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
+    let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId
     if (editionCode === "fse") {
         if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
@@ -630,7 +667,7 @@ async function mainTableVariables(tr) {
         if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
         if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
         if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum ] = tr.children };
-        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,,, taxonomy ] = tr.children };
+        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,, birthDate, taxonomy ] = tr.children };
         if (["Subs"].includes(page.alias)) { [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children };
     } else if (editionCode === "mse") {
         if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
@@ -668,13 +705,13 @@ async function modifyDocumentTables(tableBody) {
     const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
-            mainTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
+            mainTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
                 if (["DocDisc"].includes(page.alias)) {
                     hideNotificationRows(name, tr)
                 };
 
                 if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) };
-                doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, maxisNum, intCase, mnsureId })
+                doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, maxisNum, intCase, mnsureId })
             });
         }();
     });
@@ -720,7 +757,7 @@ function groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////////// MODIFICATIONS START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-function doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, maxisNum, intCase, mnsureId, }={}) {
+function doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, maxisNum, intCase, mnsureId, }={}) {
 // function doModifications({ name, createdDate, modifiedDate, taxonomy, createdBy, modifiedBy, shortNote='', title, reviewed, maxisNum, sortedByCaseNum='', receivedDate }={}) {
     modifyReviewed(reviewed)
     modifyTitles(title, shortNote)
@@ -731,16 +768,12 @@ function doModifications({ title, name, firstName, lastName, shortNote, docBox, 
         case "mse": modifyCaseNum(intCase); break;
     }
     modifyTaxonomy(taxonomy)
-    modifyDate(createdDate)
-    modifyDate(modifiedDate)
-    modifyDate(receivedDate)
-    modifyCreatedModifiedBy(createdBy)
-    modifyCreatedModifiedBy(modifiedBy)
+    let dateModifications = [createdDate, modifiedDate, receivedDate, birthDate].forEach(modifyDate);
+    let nameModifications = [createdBy, modifiedBy].forEach(modifyCreatedModifiedBy)
 };
 function modifyReviewed(reviewed) {
     if (!reviewed) { return };
     reviewed.textContent = reviewed.textContent === "Yes" ? "✓" : "" // ✓ ✕ ☐ ☒ ☑
-    // reviewed.textContent = reviewed.textContent === "Yes" ? "☑" : "☐" // ✓ ✕ ☐ ☒ ☑
 };
 function modifyTitles(title, shortNote) {
     if (!title) { return };
@@ -881,7 +914,8 @@ function createNewEle(nodeName, attribObj={}, dataObj={}) {
     return newEle;
 };
 function arrangeElements(elementArray) {
-	const validArray = item => Array.isArray(item) && item.length > 1
+	const validArray = arrToCheck => Array.isArray(arrToCheck) && arrToCheck.length > 0
+    if (!validArray(elementArray)) { return };
 	return elementArray.map((item, i, arr) => validArray(item) ? subLevels(item, arr[i-1]) : item ).filter(e=>e)
 	function subLevels(eleArr, parent) {
 		eleArr.forEach((item, i) => {
