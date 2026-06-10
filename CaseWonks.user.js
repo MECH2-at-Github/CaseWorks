@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.19
+// @version      0.0.20
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -34,19 +34,23 @@ const page = new Map([
     ['Scan.aspx', { alias: 'Scan' }],
     ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
     ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fsestlouis' }],
-    ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'ssestlouis' }],
-    ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'csestlouis' }],
-    ['ViewByMNsureEdition.aspx', { alias: 'MSE', subdomain: 'msestlouis' }],
+    ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fse' }],
+    ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'sse' }],
+    ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'cse' }],
+    ['ViewByMNsureEdition.aspx', { alias: 'MSE', subdomain: 'mse' }],
     // ['', { alias: '', }],
     // ['', { alias: '', }],
     // ['', { alias: '', }],
 ]).get(thisPageName) ?? { alias: 'general' };
 mainBody.classList.add(page.alias, 'CaseWonks')
-const editionLocation = ( page.hasOwnProperty('subdomain') ? page.subdomain : document.querySelector('#zz7_TopNavigationMenu .menu-item-text')?.textContent?.replace(/\W/g, '') ?? "fsestlouis" ).toLowerCase(), editionCode = editionLocation.slice(0, 3);
+const currPageEditionCode = window.location.host.split(".")[0]?.toLowerCase()
+page.alias.includes('Home') && localStorage.setItem( 'editionLocation', currPageEditionCode )
+const editionLocation = ( page.hasOwnProperty('subdomain') ? page.subdomain : [ "fse", "mse", "cse", "sse", ].includes(currPageEditionCode.slice(0, 3)) ? currPageEditionCode : localStorage.getItem('editionLocation') )
+const editionCode = editionLocation.slice(0, 3), countyCode = editionLocation.slice(3);
+
 const edition = new Map([
-    ['fse', { SOR: "MAXIS", caseNumFormat: new RegExp("^\\d{1,8}$"), notFound: "PRIV", }],
-    ['mse', { SOR: "MNSure", caseNumFormat: new RegExp("^\\d{8}$"), notFound: "Not Found", }],
+    ['fse', { SOR: "MAXIS", caseNumFormat: new RegExp("^\\d{1,8}$"), notFound: "PRIV", docDisc: "MAXIS" }],
+    ['mse', { SOR: "MNSure", caseNumFormat: new RegExp("^\\d{8}$"), notFound: "Not Found", docDisc: "InCase" }],
     ['cse', { SOR: "PRISM", caseNumFormat: new RegExp("^\\d{10} ?\\d{2}$"), notFound: "PRIV", }],
     ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV", }]
 ]).get(editionCode)
@@ -60,15 +64,21 @@ const docTypeSwaps = [ // escapes need double slash "\\" // characters needing e
     ["^SLF[P]?[0-9]{1,3} ", ""],
     ["^D[0-9]{3} ", ""],
     // Incoming portal docs, client initiated //
-    [`Portal200 General Income "Paystubs, W2’s, Tax Returns, Employer Statements, Self- Employment, SSI, etc\\."`, "Portal doc: Income"],
+    [`Portal100 General Identity "Birth Certificates, DL, Passport, Social Security Card, Immigration, Guardianship, Marriage Certification, etc\\."`, "Portal doc: ID, BC, etc."],
+    [`Portal200 General Income \\"Paystubs, W2’s, Tax Returns, Employer Statements, Self- Employment, SSI, etc\\.\\"`, "Portal doc: Income"],
     [`Portal300 General Assets "Vehicle Title, Bank Statements, Life Insurance Policy, 401k Account, etc\\."`, "Portal doc: General Assets"],
     [`Portal400 General Proof of Residency "Utility Bills, Rent, Lease Agreement, Eviction Notice, Home-Owner's Insurance, etc\\."`, "Portal doc: Residency"],
     [`Portal500 General Medical "Medical Bills, Pregnancy Verification, Medical Insurance Card, Medical Opinion, Drug Test, etc\\."`, "Portal doc: Medical"],
-    // General //
+
+    // Releases //
     ["Authorization for Release of Employment Information", "RoI Auth: Employment"],
     ["Authorization for Release of Information About Residence and Shelter Expenses", "RoI Auth: Residence\/Shelter Expenses"],
-    ["Drivers License \\(DL\\) - State ID", "State ID"],
+    ["Authorization to Share Information", "Auth to Share Info"],
     ["General Consent\\/Authorization for Release of Information", "RoI Auth: General"],
+    ["General Authorization for Release of Information", "RoI Auth: General"],
+
+    // General //
+    ["Drivers License \\(DL\\) - State ID", "State ID"],
     ["Electronic Funds Transfer", "EFT"],
     ["Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail - Delete"],
     ["Miscellaneous Correspondence \\(MC\\)", "Misc\. Correspondence"],
@@ -90,6 +100,7 @@ const docTypeSwaps = [ // escapes need double slash "\\" // characters needing e
     ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
     // Fraud //
     ["Fraud Prevention Investigation Referral", "FPI Referral"],
+    ["SUMMARY OF INVESTIGATIVE FINDINGS", "Summary of Investigative Findings"],
     // HC //
     ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
     ["HC Application for Certain Populations", "HC App for Certain Pops"],
@@ -117,7 +128,8 @@ const docTypeSwaps = [ // escapes need double slash "\\" // characters needing e
     ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
     ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
     ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
-    // ["", ""],
+    ["Giving Permission for Someone to Act on My Behalf", "Auth Rep (HC)"],
+    ["MHCP Information Needed for Reported Changes", "MHCP Info Needed"],
     // ["", ""],
     // ["", ""],
     ["\\([A-Z]+\\)$", ""], // doc type lookup shortcut //
@@ -158,26 +170,29 @@ const theadSwaps = new Map([
     // ["", ""],
 ]);
 const patterns = {
-    byEmail: '(?:by [A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0])?',
-    email: '[A-Za-z0-9.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0]',
+    byEmail: '(?:by [A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0])?',
+    email: '[A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0]',
     date: '[0-9]{1,2}\\/[0-9]{1,2}\\/[0-9]{1,4}',
     time: '[0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [AP]M',
-    phone: '[0-9]{10,11}',
-    faxAgain: '(?: [0-9]{3,4}-?[0-9]{3}-?[0-9]{4})?',
+    phone: '1?[0-9]{10}',
+    faxAgain: '(?: \\+?1?[0-9]{3}-?[0-9]{3}-?[0-9]{4})?',
 };
 const shortNoteSwaps = [ // Assume the space after an email address is not a whitespace character and use [\s\xA0] instead. //
     ["[0-9]{10}_[A-Z0-9_]+_", ""], // MNB confirmation number //
     ["Item ID\\:[0-9]+ not found\\.", ""],
-    ["Moved from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmail + "on (" + patterns.date + ") " + patterns.time + "\\.", "Moved from $1 on $2"],
-    ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmail + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time + "\\.", "Received via Portal $1."],
-    // Document was checked-in by System at 4/24/2026 10:06:06 AM.
-    ["Public Portal - " + patterns.email + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", "Sent via Portal $1."],
+    ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmail + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1 from $2 on $3"],
+    ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmail + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Rec'd via Portal " + dateFuncs.formatDate(dateMatch, "mdyy") + "." ],
+    ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Doc checked-in on " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
+    ["Public Portal - " + patterns.email + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Sent via Portal " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
+    ["A[0-9]{9}_([A-Z]+)[0-9_]+(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time, "$1 $2 rec'd: $3"],
     ["\\.Received via", ". Received via"],
     ["\\.Sent via", ". Sent via"],
     ["\\*TO:[\\s\\xA0]*[+]?" + patterns.phone + " ", ""],
     ["FROM:[\\s\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain, "Fax from $1."],
-    ["Auto-Copy from ([A-Z]{3})", "Auto-copy ($1)"],
     ["^Web$", ""],
+    // Auto-copy //
+    ["Auto-Copy from ([A-Z]{3})", "Auto-copy ($1)"],
+    [": (?:SSN|MAXIS) match", ""],
     // ["", ""],
     // ["", ""],
     // ["", ""],
@@ -257,10 +272,10 @@ const gbl = {
 };
 const caseData = (() => { // used for case history and fixing page title // fse, mse correct //
     if (page.alias !== "CaseFile") { return };
-    let caseIdNameEle = document.querySelector('h1:not(#pageTitle)') // mainBody.querySelector('#CaseFileHeaderStatus')?.previousElementSibling;
-    if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
-    if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: edition.notFound } }
+    let caseIdNameEle = document.querySelector('h1:not(#pageTitle)')
     let splitCaseData = (() => {
+        if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
+        if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: edition.notFound } }
         switch(editionCode) {
             case "fse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups;
             case "mse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseName>[A-Z'\-, ]+) \((?<caseNum>[0-9]{8})\)/i).groups;
@@ -270,12 +285,18 @@ const caseData = (() => { // used for case history and fixing page title // fse,
         };
     })();
     if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
-    if (editionCode !== "cse") { splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10) }
-    let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
-    caseNumEle.addEventListener('click', clickEvent => snackBar(clickEvent.target.textContent) )
-    caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
-    caseIdNameEle.replaceWith( caseIdNameEleReplacement )
-    return { caseNum: splitCaseData.caseNum, caseName: splitCaseData.caseName };
+    if (["fse", "mse", ].includes(editionCode)) {
+        splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10)
+        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum, title: "Left click to copy #. Right click to open on Doc Disc." })
+        splitCaseData.caseName !== edition.notFound
+            ? caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
+        : caseIdNameEleReplacement.append( createNewEle('div', { textContent: "Client Detail Not Found In Repository For Case " }), caseNumEle )
+        caseIdNameEle.replaceWith( caseIdNameEleReplacement );
+
+        caseNumEle.addEventListener('click', clickEvent => snackBar(clickEvent.target.textContent) );
+        caseNumEle.addEventListener('contextmenu', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Document%20Discovery.aspx?" + edition.docDisc + "=" + splitCaseData.caseNum, "_blank") } );
+    };
+    return splitCaseData;
 })();
 !function addCustomTableRules() {
     return;
@@ -293,8 +314,8 @@ const caseData = (() => { // used for case history and fixing page title // fse,
     mainBody.insertAdjacentElement( 'afterbegin', gbl.eles.navContainer )
     !function mainPageLink() {
         gbl.eles.navContainer.appendChild( gbl.eles.homePageLink )
-        gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionLocation + ".caseworkscloud.com/", "_self") });
-        gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionLocation + ".caseworkscloud.com/", "_blank"); });
+        gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_self") });
+        gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_blank"); });
     }();
     !function addVersion() {
         mainBody.querySelector('#RibbonContainer-TabRowRight').append( gbl.eles.caseWonksVersion )
@@ -442,7 +463,6 @@ try {
     !function fixPageTitle() {
         document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
     }();
-    setTimeout(() => { document.querySelector('li[aria-controls="DPC"][aria-selected="false"]')?.click() }, 300)
 }();
 !function DocBox() {
     if (page.alias !== "DocBox") { return };
@@ -656,46 +676,56 @@ const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'pad
 let lastCaseNum = ""
 async function mainTableVariables(tr) {
     let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId
-    if (editionCode === "fse") {
-        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, createdBy ] = tr.children };
-        if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-        if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum ] = tr.children };
-        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children };
-        if (["Subs"].includes(page.alias)) {
-            switch(mainBody.querySelector('#scriptWPQ1 #Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()) {
-                case "EDIT": [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
-                case "STOP": [,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+    switch(editionCode) {
+        case "fse":
+            if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, createdBy ] = tr.children };
+            if (["DocBox"].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
+            if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, maxisNum ] = tr.children };
+            if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, maxisNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children };
+            if (["Subs"].includes(page.alias)) {
+                switch(mainBody.querySelector('#scriptWPQ1 #Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()) {
+                    case "EDIT": [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+                    case "STOP": [,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+                };
             };
-        };
-    } else if (editionCode === "mse") {
-        if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["DocBox", "Author", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy ] = tr.children };
-        if (["AllItems", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
-        if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-        // if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum ] = tr.children };
-        if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, mnsureId, maxisNum,,,, taxonomy ] = tr.children };
-        if (["DocDiscDPC", ].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, maxisNum, taxonomy, createdDate ] = tr.children };
-        if (["ViewbyDocSet", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-        if (["PendingStatus", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
+            break;
+        case "mse":
+            if (["Home"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, maxisNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["DocBox", "Author", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["WorkingDocs",].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy ] = tr.children };
+            if (["AllItems", ].includes(page.alias)) { [,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
+            if (["eSign"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
+            // if (["AllDpcDocs"].includes(page.alias)) { [,,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, mnsureId, maxisNum ] = tr.children };
+            if (["DocDisc"].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, maxisNum,, taxonomy, createdDate, receivedDate ] = tr.children };
+            if (["DocDiscDPC", ].includes(page.alias)) { [,, title, name,, firstName, lastName, docBox, shortNote, intCase, maxisNum, taxonomy, createdDate ] = tr.children };
+            if (["ViewbyDocSet", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
+            if (["PendingStatus", ].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
+            break;
 
-    } else if (editionCode === "cse") {
-    } else if (editionCode === "sse") {
+        case "cse":
+            break;
+        case "sse":
+            break;
     };
     return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId };
 };
 async function efcTableVariables(tr) {
     let title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
-    if (editionCode === "fse") {
-        [ ,, title, name, uselessMenu, firstName, lastName, shortNote,, createdDate, receivedDate, modifiedDate ] = tr.children
-    } else if (editionCode === "mse") {
-        [ ,, title, name, uselessMenu, firstName, lastName, shortNote,,,, createdDate, receivedDate, modifiedDate ] = tr.children
-    } else if (editionCode === "cse") {
-    } else if (editionCode === "sse") {
+    switch(editionCode) {
+        case "fse":
+            [ ,, title, name, uselessMenu, firstName, lastName, shortNote,, createdDate, receivedDate, modifiedDate ] = tr.children
+            break;
+        case "mse":
+            [ ,, title, name, uselessMenu, firstName, lastName, shortNote,,,, createdDate, receivedDate, modifiedDate ] = tr.children
+            break;
+        case "cse":
+            break;
+        case "sse":
+            break;
     };
     return { title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId };
 };
@@ -716,7 +746,7 @@ async function modifyDocumentTables(tableBody) {
     modifyTableHeaders(tableBody)
     modifiedTables.push(tableBody)
 };
-let selectedCaseNum;
+let selectedCaseNum = 0;
 async function modifyDocumentTablesEFC(tableBody) {
     tableBody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(tableBody) ) { return };
@@ -808,24 +838,26 @@ function modifyShortNote(shortNote) {
     if (shortNote.textContent) { shortNote.title = shortNoteOrigText }
 };
 function modifyCaseNum(maxisNum) {
-    if ( !maxisNum || !testCaseNum(maxisNum?.textContent?.trim()) ) { return };
-    let caseNum = maxisNum.textContent.trim().split(/^0/).reverse()[0]
+    if ( !maxisNum) { return };
+    let caseNum = maxisNum.textContent?.trim()?.split(/^0/)?.reverse()[0] || ""
     let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: caseNum, style: "cursor: pointer;" })
     maxisNum.replaceWith(newLinkTd)
-    newLinkTd.append(newLinkA, copySymbol())
+    caseNum && newLinkTd.append(newLinkA, copySymbol())
     newLinkA?.addEventListener('click', () => { openCaseFile(newLinkA.textContent, "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
         openCaseFile(newLinkA.textContent, "_blank")
     });
     let maxisNumRow = newLinkTd.closest('tr'), maxisNumTable = newLinkTd.closest('tbody')
-    maxisNumRow.classList.add(caseNum)
+    caseNum && maxisNumRow.classList.add(caseNum)
     maxisNumRow.addEventListener('click', () => {
         if (caseNum === selectedCaseNum) { return };
         selectedCaseNum = caseNum
-        Array.from(maxisNumTable.querySelectorAll('.selectedCaseNumDocs'), tr => { tr.classList.remove('selectedCaseNumDocs') });
-        Array.from(document.getElementsByClassName(caseNum), tr => { tr.classList.add('selectedCaseNumDocs')} );
+        removeHighlight()
+        addHighlight(caseNum)
     });
+    function addHighlight(caseNum) { Array.from(document.getElementsByClassName(caseNum), tr => { tr.classList.add('selectedCaseNumDocs')} ); };
+    function removeHighlight() { Array.from(maxisNumTable.querySelectorAll('.selectedCaseNumDocs'), tr => { tr.classList.remove('selectedCaseNumDocs') }); };
 };
 function modifyTaxonomy(taxonomy) {
     if (!taxonomy || !taxonomy?.textContent) { return };
@@ -876,7 +908,6 @@ function openCaseFile(openCaseFileNum, target) {
     if (!testCaseNum(openCaseFileNum)) { return };
     copy(openCaseFileNum)
     window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=" + edition.SOR, target)
-    // window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=MAXIS", target)
 };
 function testCaseNum(caseNumber) { caseNumber = caseNumber?.replace(/\s/g, ''); return (edition.caseNumFormat)?.test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
 function navToCaseFileNTF() {
@@ -895,10 +926,13 @@ function visualIndicatorIfPdfSelected() {
     };
 };
 function tbodLoadedEles() {
-    let tbodArray = page.singleTable ? [ primaryTableLoc.querySelector('tbody') ] // single table? first table body found in primaryTableLoc, no #id //
-    : page.alias === "DocDisc" ? Array.from(document.querySelector('#MSOZoneCell_WebPartWPQ4').parentElement.querySelectorAll('table  table tbody tbody')) // round-about locating on DocDisc //
-    : Array.from(primaryTableLoc?.querySelectorAll('tbody[id^=tbod]')) // multiple tables? all tbody elements with #id starting with tbod //
-    ?.filter(ele => ele.getAttribute('isloaded') === "true")
+    let tbodArray = page.singleTable
+        ? [ primaryTableLoc.querySelector('tbody') ] // single table? first table body found in primaryTableLoc, no #id //
+        : page.alias === "DocDisc" // round-about locating on DocDisc //
+            // ? editionCode === "fse"
+                // ? Array.from(document.querySelector('#MSOZoneCell_WebPartWPQ4').parentElement.querySelectorAll('table  table tbody tbody')) :
+            ? Array.from(document.querySelector('#MSOZoneCell_WebPartWPQ4').closest('tr').querySelectorAll('tbody:has(>tr.ms-itmhover)'))
+            : Array.from(primaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true") // multiple tables? all tbody elements with #id starting with tbod //
     return tbodArray;
 };
 function tbodLoadedElesEFC() {
