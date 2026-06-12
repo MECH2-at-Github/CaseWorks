@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.20
+// @version      0.0.21
 // @description  Make CaseWorks less miserable to use.
 // @author       Worker McWorkerface
 // @match        https://*.caseworkscloud.com/*
@@ -473,18 +473,22 @@ try {
     if (page.alias !== "DocDisc") { return };
     document.head.append( createNewEle('style', { textContent: ".DDTable { & td:not(:has(input, a)) { text-align: right; } & td:has(select) { padding: 0 !important; } td.GoTd { position: unset; margin: 0; }" }) )
     let MSOZoneCell_WebPartWPQ4 = document.querySelector('#MSOZoneCell_WebPartWPQ4'); MSOZoneCell_WebPartWPQ4 && (MSOZoneCell_WebPartWPQ4.style.display = "inline-table")
-    const hideNotificationsSlider = createSlider({ textContent: "Toggle Notifications", title: "Show or Hide 'Notification' rows.", checked: "checked", id: "hideNotificationsSliderCheck" })
-    const hideNotificationsStyle = createNewEle('style', { textContent: ".toggleHidden { display: none; }" })
-    hideNotificationsSlider.addEventListener('click', clickEvent => {
-        switch(clickEvent.target.checked) {
-            case true: hideNotificationsStyle.textContent = ".toggleHidden { display: none; }"; break;
-            case false: hideNotificationsStyle.textContent = ".toggleHidden { display: table-row; }"; break;
-        };
-    });
-    mainBody.append(hideNotificationsStyle)
-    gbl.eles.navContainer.append(hideNotificationsSlider)
+    const toggleNotificationsSlider = createSlider({ textContent: "Toggle Notifications", title: "Show or Hide 'Notification' rows.", checked: "checked", id: "hideNotificationsSliderCheck" })
+    gbl.eles.toggleNotifications = createNewEle('style', { textContent: ".toggleNotifications { display: none; }" })
+    toggleNotificationsSlider.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "toggleNotifications") });
+    const toggleDeletedSlider = createSlider({ textContent: "Toggle Deleted", title: "Show or Hide 'DeletedDPC' rows.", checked: "checked", id: "hideDeletedSliderCheck" })
+    gbl.eles.toggleDeleted = createNewEle('style', { textContent: ".toggleDeleted { display: none; }" })
+    toggleDeletedSlider.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "toggleDeleted") });
+    mainBody.append(gbl.eles.toggleNotifications, gbl.eles.toggleDeleted)
+    gbl.eles.navContainer.append(toggleNotificationsSlider, toggleDeletedSlider)
     let goTd = mainBody.querySelector('.GoTd'); goTd?.setAttribute('rowspan', 1)//; addStyling(goTd, { position: "unset", margin: "0"})
 }();
+function toggleSliderVisibility(isChecked, styleName) {
+    switch(isChecked) {
+        case true: gbl.eles[styleName].textContent = "." + styleName + " { display: none; }"; break;
+        case false: gbl.eles[styleName].textContent = "." + styleName + " { display: table-row; }"; break;
+    };
+};
 !function eSign() {
     if (page.alias !== "eSign") { return };
     countDocs()
@@ -737,7 +741,7 @@ async function modifyDocumentTables(tableBody) {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
             mainTableVariables(tr).then(({ title, name, uselessMenu, firstName, lastName, shortNote, maxisNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
-                if (["DocDisc"].includes(page.alias)) { hideNotificationRows(name, tr) };
+                if (["DocDisc"].includes(page.alias)) { addClassToNotificationRows(name, tr); addClassToDeletedRows(docBox, tr) };
                 if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) };
                 doModifications({ title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, maxisNum, intCase, mnsureId })
             });
@@ -763,9 +767,13 @@ async function modifyDocumentTablesEFC(tableBody) {
     modifiedTables.push(tableBody)
 };
 function modifyTableHeaders(tableBody) { Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent }) };
-function hideNotificationRows(name, tr) {
+function addClassToNotificationRows(name, tr) {
     if (!name || name?.textContent?.indexOf("Notif") !== 0) { return };
-    tr.classList.add('toggleHidden')
+    tr.classList.add('toggleNotifications')
+};
+function addClassToDeletedRows(docBox, tr) {
+    if (!docBox || docBox?.textContent?.indexOf("DeletedDPC") !== 0) { return };
+    tr.classList.add('toggleDeleted')
 };
 function groupByCaseNumIfSorted(tableBody, lastCaseNum, maxisNum, tr) {
     if (!maxisNum) { return lastCaseNum };
@@ -839,6 +847,7 @@ function modifyShortNote(shortNote) {
 };
 function modifyCaseNum(maxisNum) {
     if ( !maxisNum) { return };
+    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDisc) > -1) { return };
     let caseNum = maxisNum.textContent?.trim()?.split(/^0/)?.reverse()[0] || ""
     let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: caseNum, style: "cursor: pointer;" })
     maxisNum.replaceWith(newLinkTd)
