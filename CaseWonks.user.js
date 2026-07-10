@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.22
+// @version      0.0.23
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -910,8 +910,9 @@ function modifyTitles(title, shortNote) {
             shortNote.textContent = ''
             return 1
         } else if (title.textContent?.includes('MNB001 Application')) {
-            replaceChildrenSpan(title, { title: titleOrigText, textContent: determineAppType(shortNote.textContent) })
-            shortNote.textContent = ''
+            let { appType, remainingShortNote } = determineAppType(shortNote.textContent)
+            replaceChildrenSpan(title, { title: titleOrigText, textContent: appType })
+            shortNote.textContent = remainingShortNote
             return 1
         };
     };
@@ -919,9 +920,9 @@ function modifyTitles(title, shortNote) {
     docTypeSwaps.forEach( ([regX, swap]) => { titleRegExText = titleRegExText.replace(new RegExp(regX, "i"), swap) });
     replaceChildrenSpan(title, { title: titleOrigText, textContent: titleRegExText })
     function determineAppType(shortNoteText) {
-        if (shortNoteText.includes("CCAP")) { return "CCAP Application (MNB001)" }
-        else if (shortNoteText.includes("CAF")) { return "Combined Application (MNB001)" }
-        else { return "Unknown App Type (MNB001)" };
+        if (shortNoteText.includes("CCAP")) { return { appType: "CCAP Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else if (shortNoteText.includes("CAF")) { return { appType: "Combined Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else { return { appType: "Unknown App Type (MNB001)", remainingShortNote: shortNoteText } };
     };
 };
 function modifyShortNote(shortNote) {
