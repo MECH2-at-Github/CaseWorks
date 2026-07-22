@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.23
+// @version      0.0.24
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -129,140 +129,102 @@ const edition = new Map([
     ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV", }]
 ]).get(editionCode)
 
-const docTypeSwaps = [ // escapes need double slash "\\" // characters needing escapes: .?()[]/\ //
-    ["Notification - ", ""],
+const docTypeSwaps = {
+    notification: ["Notification - ", ""],
+    parenShortcuts: ["\\([A-Za-z]+\\)$", ""],
+
     // Form numbers //
-    ["^FSE[0-9]{1,3}[A-Z]? ", ""],
-    ["^EA[0-9]{1,3}[A-Z]? ", ""],
-    ["^DHS[0-9]{1,6}[A-Z]? ", ""],
-    ["^SLF[P]?[0-9]{1,3} ", ""],
-    ["^D[0-9]{3} ", ""],
-    // ["", ""],
-    // ["", ""],
+    fseForm: ["FSE[0-9]{1,3}[A-Z]? ", ""],
+    eaForm: ["EA[0-9]{1,3}[A-Z]? ", ""],
+    dhsForm: ["(?: - )?DHH?S ?[0-9]{1,6}[A-Za-z]? ?", ""],
+    slfForm: ["SLF[P]?[0-9]{1,3} ", ""],
+    dForm: ["D[0-9]{3} ", ""],
 
     // Incoming portal docs, client initiated //
-    [`Portal100 General Identity "Birth Certificates, DL, Passport, Social Security Card, Immigration, Guardianship, Marriage Certification, etc\\."`, "Portal doc: ID, BC, etc."],
-    [`Portal200 General Income \\"Paystubs, W2’s, Tax Returns, Employer Statements, Self- Employment, SSI, etc\\.\\"`, "Portal doc: Income"],
-    [`Portal300 General Assets "Vehicle Title, Bank Statements, Life Insurance Policy, 401k Account, etc\\."`, "Portal doc: General Assets"],
-    [`Portal400 General Proof of Residency "Utility Bills, Rent, Lease Agreement, Eviction Notice, Home-Owner's Insurance, etc\\."`, "Portal doc: Residency"],
-    [`Portal500 General Medical "Medical Bills, Pregnancy Verification, Medical Insurance Card, Medical Opinion, Drug Test, etc\\."`, "Portal doc: Medical"],
+    portal100: [`Portal100 General Identity "Birth Certificates, DL, Passport, Social Security Card, Immigration, Guardianship, Marriage Certification, etc\\."`, "Portal doc: ID, BC, etc."],
+    portal200: [`Portal200 General Income \\"Paystubs, W2’s, Tax Returns, Employer Statements, Self- Employment, SSI, etc\\.\\"`, "Portal doc: Income"],
+    portal300: [`Portal300 General Assets "Vehicle Title, Bank Statements, Life Insurance Policy, 401k Account, etc\\."`, "Portal doc: General Assets"],
+    portal400: [`Portal400 General Proof of Residency "Utility Bills, Rent, Lease Agreement, Eviction Notice, Home-Owner's Insurance, etc\\."`, "Portal doc: Residency"],
+    portal500: [`Portal500 General Medical "Medical Bills, Pregnancy Verification, Medical Insurance Card, Medical Opinion, Drug Test, etc\\."`, "Portal doc: Medical"],
 
     // Releases //
-    ["Authorization for Release of Employment Information", "RoI Auth: Employment"],
-    ["Authorization for Release of Information About Residence and Shelter Expenses", "RoI Auth: Residence\/Shelter Expenses"],
-    ["Authorization to Share Information", "Auth to Share Info"],
-    ["General Consent\\/Authorization for Release of Information", "RoI Auth: General"],
-    ["General Authorization for Release of Information", "RoI Auth: General"],
-    // ["", ""],
-    // ["", ""],
+    roiEmployment: ["Authorization for Release of Employment Information", "RoI Auth: Employment"],
+    roiShelter: ["Authorization for Release of Information About Residence and Shelter Expenses", "RoI Auth: Residence\/Shelter Expenses"],
+    roiShare: ["Authorization to Share Information", "Auth to Share Info"],
+    roiGeneral: ["General Consent\\/Authorization for Release of Information", "RoI Auth: General"],
+    roiGeneral2: ["General Authorization for Release of Information", "RoI Auth: General"],
 
     // General //
-    ["Drivers License \\(DL\\) - State ID", "State ID"],
-    ["Electronic Funds Transfer", "EFT"],
-    ["Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail - Delete"],
-    ["Miscellaneous Correspondence \\(MC\\)", "Misc\. Correspondence"],
-    ["Notice of Priv Practices and Notice of Rights and Resp", "Notices: Privacy, Rights, Resp."],
-    ["Other Residence", "Residence"],
-    ["Shelter\\/Residence Verification", "Residence"],
-    ["Social Security", "SS"],
-    ["- Veterans Admin", ""],
-    ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
-    // ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
-    // ["", ""],
-    // ["", ""],
-    // ["", ""],
+    pictureId: ["Drivers License \\(DL\\) - State ID", "State ID"],
+    eft: ["Electronic Funds Transfer", "EFT"],
+    mergeMail: ["Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail - Delete"],
+    miscCorr: ["Miscellaneous Correspondence \\(MC\\)", "Misc\. Correspondence"],
+    privacyPrac: ["Notice of Priv Practices and Notice of Rights and Resp", "Notices: Privacy, Rights, Resp."],
+    residenceOther: ["Other Residence", "Residence"],
+    residence: ["Shelter\\/Residence Verification", "Residence"],
+    socialSecurity: ["Social Security", "SS"],
+    vetsAdmin: ["- Veterans Admin", ""],
+    schoolAttend: ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
 
     //// FSE ////
     // CCAP //
-    ["(?:Minnesota )?Child Care Assistance( Program)?(?: \\(CCAP\\))?", "CCAP"],
-    ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
-    ["Redetermination Form", "Redetermination"],
-    ["MFIP\\/DWP Employment Services Child Care Request", "ES to CCAP 7054"],
-    ["SLC CCAP Education Plan 9\\.24", "CCAP Education Plan"],
-    // ["", ""],
-    // ["", ""],
+    ccapAcrynym: ["(?:Minnesota )?Child Care Assistance( Program)?(?: \\(CCAP\\))?", "CCAP"],
+    ccapBsfAcrynym: ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
+    ccapRedet: ["Redetermination Form", "Redetermination"],
+    ccap7054: ["MFIP\\/DWP Employment Services Child Care Request", "ES to CCAP 7054"],
+    ccapEduPlan: ["SLC CCAP Education Plan 9\\.24", "CCAP Education Plan"],
+    ccapMedForm: ["CCAP Medical Condition Documentation Form", "CCAP Medical Condition Doc Form"],
+    ccapLnlAck: ["Parent Acknowledgement When Choosing a Legal Nonlicensed Provider", "LNL Acknowledgement"],
 
     // CS //
-    ["Cooperation with Child Support Enforcement", "CS Good Cause"],
-    ["Referral to Support and Collections", "CS Referral"],
-    ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
-    // ["", ""],
-    // ["", ""],
+    csGc: ["Cooperation with Child Support Enforcement", "CS Good Cause"],
+    csReferral: ["Referral to Support and Collections", "CS Referral"],
+    csEndGc: ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
 
     // Fraud //
-    ["Fraud Prevention Investigation Referral", "FPI Referral"],
-    ["SUMMARY OF INVESTIGATIVE FINDINGS", "Summary of Investigative Findings"],
-    // ["", ""],
-    // ["", ""],
+    fraudRef: ["Fraud Prevention Investigation Referral", "FPI Referral"],
+    fraudFound: ["SUMMARY OF INVESTIGATIVE FINDINGS", "Summary of Investigative Findings"],
 
     // HC //
-    ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
-    ["HC Application for Certain Populations", "HC App for Certain Pops"],
-    ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
-    ["Determination of Cost Effectiveness", "Determination of CEHI"],
-    ["Families with Children and Adults", "FCA"],
-    ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
-    ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
-    ["New Household Member or Applicant Request Form", "HC: New HH Member/Applicant Request"],
-    ["Obtain Financial Information from the Asset Verification Service", "Auth to Obtain Financial Info from AVS"],
-    ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC"],
-    // ["", ""],
-    // ["", ""],
-    // ["", ""],
+    hcMHCP: ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
+    hcApp: ["HC Application for Certain Populations", "HC App for Certain Pops"],
+    hcRenew: ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
+    hcCEHI: ["Determination of Cost Effectiveness", "Determination of CEHI"],
+    hcFCA: ["Families with Children and Adults", "FCA"],
+    hcLiquidAssets: ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
+    hcMaFCA: ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
+    hcNewMember: ["New Household Member or Applicant Request Form", "HC: New HH Member/Applicant Request"],
+    hcFinInfoAuth: ["Obtain Financial Information from the Asset Verification Service", "Auth to Obtain Financial Info from AVS"],
+    hcLtcRenew: ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC"],
 
     // FNW //
-    ["General Assistance Verifying Participation in Substance Use Disorder Treatment", "GA Verifying Partic. in SUD Treatment"],
-    ["Interim Assistance Authorization \\(non-SSI\\)", "Non-SSI Interim Assist. Auth"],
-    ["SSI Interim Assistance Authorization", "SSI Interim Assist. Auth"],
-    // ["", ""],
-    // ["", ""],
+    fnwSudTreatVerif: ["General Assistance Verifying Participation in Substance Use Disorder Treatment", "GA Verifying Partic. in SUD Treatment"],
+    fnwNonSSI: ["Interim Assistance Authorization \\(non-SSI\\)", "Non-SSI Interim Assist. Auth"],
+    fnwSSI: ["SSI Interim Assistance Authorization", "SSI Interim Assist. Auth"],
 
     // LTC //
-    ["Lead Agency Assessor/Case Manager/Worker LTC Communication Form", "LTC Communication Form"],
-    // ["", ""],
-    // ["", ""],
+    ltcCommForm: ["Lead Agency Assessor/Case Manager/Worker LTC Communication Form", "LTC Communication Form"],
 
     // SNAP/Cash //
-    ["Combined Application - Addendum \\(Cash and Supplemental Nutrition Assistance Program\\)", "CAF Addendum - SNAP/Cash"],
-    ["Combined Application Form \\(CAF\\)", "Combined Application"],
-    ["(?:the )Supplemental Nutrition Assistance Program(?: \\(SNAP\\))?", "SNAP"],
-    ["Minnesota Family Investment Program \\(MFIP\\)", "MFIP"],
-    ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six-Month Report", "Notice of late HRF, HCR, CSMR"],
-    ["Signed Personal Statement about Assets for MFIP,DWP,GA,MSA, and GRH Programs", "Assets Statement form"],
-    // ["", ""],
-    // ["", ""],
-    // ["", ""],
+    fsCaf: ["Combined Application Form \\(CAF\\)", "Combined Application"],
+    fsCafAddendum: ["Combined Application - Addendum \\(Cash and Supplemental Nutrition Assistance Program\\)", "CAF Addendum - SNAP/Cash"],
+    fsSnapAcrynym: ["(?:the )Supplemental Nutrition Assistance Program(?: \\(SNAP\\))?", "SNAP"],
+    fsMfipAcrynym: ["Minnesota Family Investment Program \\(MFIP\\)", "MFIP"],
+    fsLateRenew: ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six-Month Report", "Notice of late HRF, HCR, CSMR"],
+    fsAssets: ["Signed Personal Statement about Assets for MFIP,DWP,GA,MSA, and GRH Programs", "Assets Statement form"],
+    fsEsReferral: ["Employment Services$", "ES Referral"],
+    fsSchoolVer: ["School Attendance Verification", "School Attend Ver."],
 
     // MSE //
-    ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
-    ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
-    ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
-    ["Giving Permission for Someone to Act on My Behalf", "Auth Rep (HC)"],
-    ["MHCP Information Needed for Reported Changes", "MHCP Info Needed"],
-    // ["", ""],
-    // ["", ""],
-    ["\\([A-Z]+\\)$", ""], // doc type lookup initials //
-];
-const taxonomySwaps = new Map([
-    ["1.1", "1.1: Identity"],
-    ["1.2", "1.2: IM Conf. Med."],
-    ["1.32", "1.32: Fraud"],
-    ["1.4", "1.4: IM App"],
-    ["1.5", "1.5: Income"],
-    ["1.6", "1.6: Assets"],
-    ["1.7", "1.7: Residency"],
-    ["1.8", "1.8: IM Comm"],
-    ["1.81", "1.81: CS"],
-    ["1.9", "1.9: IM Ins-Corr"],
-    ["1.91", "1.91: IM Misc"],
-    ["5.0", "5.0 CCAP Misc"],
-    ["5.2", "5.2: CCAP Own Docs"],
-    ["5.3", "5.3: CCAP App"],
-    ["5.4", "5.4: CCAP Activity"],
-    // ["", ""],
-    // ["", ""],
-    // ["", ""],
-]);
+    mseAddNewborn: ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
+    mseAddMember: ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
+    mseCertainPopElig: ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
+    mseAuthRep: ["Giving Permission for Someone to Act on My Behalf", "Auth Rep (HC)"],
+    mseMhcpIfo: ["MHCP Information Needed for Reported Changes", "MHCP Info Needed"],
+    // groupName: ["", ""],
+};
+const docTypeRegExp = new RegExp( Object.entries(docTypeSwaps).map(([group, [regExPattern,]=[]] = []) => "(?<"+group+">"+regExPattern+")").join("|"), "g" )
+
 const theadSwaps = new Map([
     ["Title", "Document Type"],
     ["Reviewed", "Rev"],
@@ -274,42 +236,93 @@ const theadSwaps = new Map([
     ["Name", "Link"],
     ["Date Received", "Received"],
     ["Created By", "Creator"],
-    ["Confirmation Number", "Confirmation"],
-    ["Integrated Case", "IntCase#"],
+    ["Confirmation Number", "Conf#"],
+    ["Integrated Case", "Int#"],
     // ["", ""],
     // ["", ""],
     // ["", ""],
 ]);
 const patterns = {
-    byEmail: '(?:by [A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0])?',
-    email: '[A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\xA0]',
+    byEmailSpace: '(?:by [A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\\xA0])?',
+    emailSpace: '[A-Za-z0-9_.+-]+\\@[A-Za-z]+\\.[A-Za-z]{2,4}[\\s\\\xA0]',
     date: '[0-9]{1,2}\\/[0-9]{1,2}\\/[0-9]{1,4}',
     time: '[0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [AP]M',
     phone: '1?[0-9]{10}',
     faxAgain: '(?: \\+?1?[0-9]{3}-?[0-9]{3}-?[0-9]{4})?',
 };
-const shortNoteSwaps = [ // Assume the space after an email address is not a whitespace character and use [\s\xA0] instead. //
-    ["[0-9]{10}_[A-Z0-9_]+_", ""], // MNB confirmation number //
-    ["Item ID\\:[0-9]+ not found\\.", ""],
-    [" incl DHS ?[0-9]{4}\\w?$", ""],
-    [" - DHS ?[0-9]{4}\\w?$", ""],
-    ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmail + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1 from $2 on $3"],
-    ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmail + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Rec'd: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") + "." ],
-    ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
-    ["Public Portal - " + patterns.email + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Sent: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
-    ["A[0-9]{9}_([A-Z]+)[0-9_]+(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time, "$1 $2 rec'd: $3"],
-    ["\\.Received via", ". Rec'd: "],
-    ["\\.Sent via", ". Sent: "],
-    ["\\*TO:[\\s\\xA0]*[+]?" + patterns.phone + " ", ""],
-    ["FROM:[\\s\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain, "Fax: $1."],
-    ["^Web$", ""],
-    // Auto-copy //
-    ["Auto-Copy from ([A-Z]{3})", "Auto-copy ($1)"],
-    [": (?:SSN|MAXIS) match", ""],
-    // ["", ""],
-    // ["", ""],
-    // ["", ""],
-];
+const shortNoteSwaps = { // Assume the space after an email address is not a whitespace character and use [\s\\xA0] instead. //
+    mnbConf: ["[0-9]{10}_[A-Z0-9_]+_", ""],
+    itemId: ["Item ID\\:[0-9]+ not found\\.", ""],
+    inclDHS: [" incl DHS ?[0-9]{4}\\w?$", ""],
+    oldDHSform: [" - DHS ?[0-9]{4}\\w?$", ""],
+    movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time, "$1: $2, $3"],
+    // movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time, "$1 from $2 on $3"],
+    sentPubPort: ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time, (fullStr, dateMatch) => "Rec'd: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") ],
+    checkedIn: ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
+    recdPubPort: ["Public Portal - " + patterns.emailSpace + "was sent this on (" + patterns.date + ") " + patterns.time, (fullStr, dateMatch) => "Sent: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") ],
+    sysAcctRecd: ["A[0-9]{9,10}_([A-Z]+)[0-9_]+(?:[A-Za-z]+_)?(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time, "$1 $2 rec'd: $3"],
+    doc_of_: ["[0-9]{9,10}_doc\\dof\\d__", ""],
+    recdVia: ["\\.Received via", ". Rec'd: "],
+    sentVia: ["\\.Sent via", ". Sent: "],
+    // faxTo: ["\\*TO:[\\s\\\xA0]*\\+?" + patterns.phone + " ", ""],
+    faxToFrom: ["\\*TO:[\\s\\\xA0]*\\+?" + patterns.phone + " FROM:[\\s\\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain + "(?: eFax)?", "Fax: $1."],
+    // faxFrom: ["FROM:[\\s\\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain, "Fax: $1."],
+    webDoc: ["^Web$", "(Website import)"],
+    autoCopy: ["Auto-Copy from ([A-Z]{3}): (?:SSN|MAXIS) match", "Auto-copy ($1)"],
+    // groupName: ["", ""],
+};
+
+const taxonomySwaps = new Map([
+    [ "1.1 IM - Enumeration-Identity", "1.1\xA0Identity" ],
+    [ "1.2 IM - Confidential-Medical", "1.2\xA0Conf.\xA0Med." ],
+    [ "1.21 IM - Substance Use Disorder", "1.21 Subs\xA0Use\xA0Dis" ],
+    [ "1.3 IM - File Retention Data", "1.3\xA0File\xA0Retent." ],
+    [ "1.31 IM - Misc. County Specific", "1.31\xA0Own\xA0Docs" ],
+    [ "1.32 IM - Fraud", "1.32\xA0Fraud" ],
+    [ "1.33 IM - Collections and Overpayments", "1.33 Overpayments" ],
+    [ "1.4 IM - Application", "1.4\xA0IM\xA0Apps" ],
+    [ "1.5 IM - Income", "1.5\xA0Income" ],
+    [ "1.6 IM - Assets", "1.6\xA0Assets" ],
+    [ "1.7 IM - Residency", "1.7\xA0Residency" ],
+    [ "1.8 IM - Other Dept Comm", "1.8\xA0IM\xA0Comms" ],
+    [ "1.81 IM - Child Support", "1.81\xA0CS" ],
+    [ "1.82 IM - LTC-GRH", "1.82\xA0LTC-GRH" ],
+    [ "1.83 IM - ES", "1.83\xA0Emp\xA0Svcs" ],
+    [ "1.9 IM - Insurance-Correspondence", "1.9\xA0Ins-Corr" ],
+    [ "1.91 IM - Misc-Bulk Scanning", "1.91\xA0Misc\xA0Bulk" ],
+    [ "2.0 SA - Subsidized Adoption", "2.0 Sub\xA0Adoption" ],
+    [ "2.1 SA - Citizenship-Identity", "2.1 Adoption\xA0Identity" ],
+    [ "2.2 SA - Application", "2.2 Adoption\xA0Apps" ],
+    [ "2.3 SA - Child Support", "2.3 Adoption\xA0CS" ],
+    [ "2.4 SA - Miscellaneous", "2.4 Adoption\xA0Misc" ],
+    [ "3.0 FC - Foster Care", "3.0 Foster\xA0Care" ],
+    [ "3.1 FC - Citizenship-Identity", "3.1 Foster\xA0Identity" ],
+    [ "3.2 FC - App-Income-Assets", "3.2 Foster\xA0App+" ],
+    [ "3.3 FC - Court Orders", "3.3 Foster Court\xA0Orders" ],
+    [ "3.4 FC - Placement Form", "3.4 Foster Placements" ],
+    [ "3.5 FC - Child Support", "3.5 Foster\xA0CS" ],
+    [ "3.6 FC - Placement Fee", "3.6 Foster Placement\xA0Fees" ],
+    [ "3.7 FC - Miscellaneous", "3.7 Foster Misc" ],
+    [ "4.0 CCAP - Provider Files", "4.0 CCAP Provider\xA0Files" ],
+    [ "4.1 CCAP - Providers Reg", "4.1 CCAP Provider\xA0Reg" ],
+    [ "4.2 CCAP - Credentials", "4.2 CCAP Provider\xA0Creds" ],
+    [ "4.3 CCAP - Provider Rates", "4.3 CCAP Provider\xA0Rates" ],
+    [ "5.0 CCAP - Child Care Assistance", "5.0\xA0CCAP" ],
+    [ "5.1 CCAP - Enumeration-Identity", "5.1 CCAP\xA0Identity" ],
+    [ "5.2 CCAP - File Retention", "5.2\xA0CCAP Own\xA0Docs" ],
+    [ "5.3 CCAP - Application", "5.3\xA0CCAP\xA0Apps" ],
+    [ "5.4 CCAP - Authorized Activity", "5.4\xA0CCAP\xA0Act." ],
+    [ "5.5 CCAP - Child Support", "5.5 CCAP\xA0CS" ],
+    [ "5.6 CCAP - Child Provider", "5.6 CCAP Child\xA0Provider" ],
+    [ "6.0 KA - Kinship Assistance", "6.0 Kinship\xA0Assist." ],
+    [ "6.1 KA - Citizenship-Identity", "6.0 Kinship\xA0Identity" ],
+    [ "6.2 KA - Application", "6.2 Kinship\xA0Apps" ],
+    [ "6.3 KA - Child Support", "6.3\xA0Kinship\xA0CS" ],
+    [ "6.4 KA - Court Documents", "6.4 Kinship \xA0 Docs" ],
+    [ "6.5 KA - Miscellaneous", "6.5 Kinship\xA0Misc" ],
+]);
+
+const shortNoteRegExp = new RegExp( Object.entries(shortNoteSwaps).map(([group, [regExPattern,]=[]] = []) => "(?<"+group+">"+regExPattern+")").join("|"), "g" )
 const tableLocQuery = (loc) => mainBody.querySelector(page[loc]);
 const modifiedTables = [];
 
@@ -323,6 +336,10 @@ const gbl = {
         caseHistory: createNewEle('datalist', { id: "caseHistory", style: "visibility: hidden;" }),
         caseWonksVersion: createNewEle('div', { id: "caseWonksVersion", textContent: GM_info.script.name + ' v' + GM_info.script.version }),
         clickedCount: createNewEle('span', { id: "clickedCount" })
+    },
+    refVars: {
+        currentTbody: undefined, primaryTableLoc: undefined, efcTableLoc: undefined,
+        highlight: { selectedClass: "" },
     },
 };
 
@@ -519,6 +536,11 @@ try {
     !function fixPageTitle() {
         document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
     }();
+    Array.from(document.querySelectorAll('td:has(>a[href="javascript:"])'), td => {
+        let tdTextChild = td.childNodes[1], tdTaxText = tdTextChild.textContent.replace(":", "").trim(), taxSwapMatch = taxonomySwaps.get(tdTaxText)
+        if (!taxSwapMatch) { return };
+        tdTextChild.textContent = " : " + taxSwapMatch + " "
+    });
 }();
 !function DocBox() {
     if (page.alias !== "DocBox") { return };
@@ -531,10 +553,10 @@ try {
     document.head.append( createNewEle('style', { textContent: ".DDTable { & td:not(:has(input, a)) { text-align: right; } & td:has(select) { padding: 0 !important; } td.GoTd { position: unset; margin: 0; } } h2 { display: flex; gap: 40px; align-items: center; padding: 0 3px !important; & > a { border: none !important; } }" }) )
 
     const dpcH2 = document.querySelector('h2.ms-webpart-titleText:has(>a[href="/Document%20Processing%20Center"])')
-    const fromCaseFile = document.referrer.includes("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Case%20File.aspx") ? "" : "checked"
+    const fromCaseFile = document.referrer.includes("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Case%20File.aspx") ? "checked" : ""
 
     gbl.eles.hideNotificationsSlider = createSlider({ textContent: "Hide Notifications", title: "Show or Hide 'Notification' rows.", checked: fromCaseFile, id: "hideNotificationsSliderCheck" })
-    gbl.eles.hideNotifications = fromCaseFile === "checked" ? createNewEle('style', { textContent: ".hideNotifications { display: none; }" }) : createNewEle('style', { textContent: ".hideNotifications { display: table-row; }" })
+    gbl.eles.hideNotifications = fromCaseFile === "checked" ? createNewEle('style', { textContent: ".hideNotifications { display: none; }" }) : createNewEle('style', { textContent: "" })
     gbl.eles.hideNotificationsSlider.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideNotifications") });
 
     gbl.eles.hideDeletedSlider = createSlider({ textContent: "Hide Deleted", title: "Show or Hide 'DeletedDPC' rows.", checked: "checked", id: "hideDeletedSliderCheck" })
@@ -545,7 +567,7 @@ try {
     gbl.eles.navContainer?.append(gbl.eles.hideNotificationsSlider, gbl.eles.hideDeletedSlider)
 
     setTimeout(() => {
-        !!window.location.search && document.querySelector('.dpcTableLoc')?.scrollIntoView({ inline: "end" })
+        !!window.location.search && document.querySelector('.dpcTableLoc')?.scrollIntoView({ inline: "start" })
         if (document.querySelectorAll('.hideNotifications').length) { selectNotifications() };
     }, 500);
 
@@ -567,7 +589,7 @@ try {
     if (page.alias !== "Home") { return };
     !function shrinkHomePageMessage() {
         const messageTr = mainBody.querySelector('.ms-rtestate-field > div')?.closest('tr')
-        if (messageTr && (/^​\n+​$/).test(messageTr.innerText)) { messageTr.style.display = "none" }
+        if (messageTr && (/^[\u200b\n]+$/).test(messageTr.innerText)) { messageTr.style.display = "none" } // ​ is copied from the page // unicode is \u200b // (/^​\n+​$/) //
         else {
             Array.from(mainBody.querySelectorAll('.ms-rtestate-field div'))?.filter(div => div.textContent.length < 5)?.forEach( emptyDiv => emptyDiv.remove() )
         };
@@ -578,7 +600,7 @@ try {
         caseWonksDataSet.updateInfo("data", "userName", userName)
     }();
 }();
-// !function Scan() {
+!function Scan() {
 //     if (page.alias !== "Scan") { return };
 //     !function updateFieldsForCCAP() {
 //         const scanEles = {
@@ -600,16 +622,21 @@ try {
 //             };
 //         };
 //     }();
-// }();
+}();
 !async function Subs() {
     if (page.alias !== "Subs") { return };
-
-    const compareOpenButton = createNewEle('button', { textContent: "Compare" }),
-          compareResetButton = createNewEle('button', { textContent: "Reset", style: "display: none;" }),
+    const compareOpenButton = createNewEle('button', { type: "button", textContent: "Compare" }),
+          compareResetButton = createNewEle('button', { type: "button", textContent: "Reset", style: "display: none;" }),
+          hideButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px;" }),
+          hideMatchedButton = createNewEle('button', { textContent: "Hide Matched", id: "hideMatched" }, { hiding: "no" }),
+          hideMatchedStyle = createNewEle('style', { textContent: "tr:is(.compareMatch, .newEntry) { display: none !important; } #hideMatched { color: red !important; } #hideWarning { display: block !important; }" }),
+          hideUnmatchedButton = createNewEle('button', { type: "button", textContent: "Hide Unmatched", id: "hideUnmatched" }, { hiding: "no" }),
+          hideUnmatchedStyle = createNewEle('style', { textContent: "tr:is(.unmatched, .duplicateMatch) { display: none !important; } #hideUnmatched { color: red !important; } #hideWarning { display: block !important; }" }),
+          hideWarning = createNewEle('span', { textContent: "Don't drag-down while hiding rows.", id: "hideWarning", style: "display: none;" }),
           compareDialog = createNewEle('dialog', { id: "compareDialog" }),
           compareTextarea = createNewEle('textarea', { id: "compareTextarea" }),
-          compareOkButton = createNewEle('button', { textContent: "OK" }),
-          compareCancelButton = createNewEle('button', { textContent: "Cancel" }),
+          compareOkButton = createNewEle('button', { type: "button", textContent: "OK" }),
+          compareCancelButton = createNewEle('button', { type: "button", textContent: "Cancel" }),
           compareContainer = createNewEle('div', { style: "max-width: 200px; display: none; position: fixed; right: 5vw; top: 15vh; flex-direction: column; gap: 10px;" }),
           dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div', { style: "margin-left: 5px;"}),
           colorCoding = createNewEle('div', { textContent: "Color legend:"}),
@@ -617,7 +644,10 @@ try {
           compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:" }),
           compareMissingList = createNewEle('div', { style: "margin-left: 5px;"})
 
-    gbl.eles.navContainer.append( ...arrangeElements( [createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ]]) )
+    gbl.eles.navContainer.append( ...arrangeElements(
+        [createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ],
+        ]) );
+    hideButtonContainer.append( hideMatchedButton, hideUnmatchedButton );
     mainBody.append(
         ...arrangeElements(
             [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
@@ -649,22 +679,27 @@ try {
              ],
             ])
     );
-
     let today = Date.now()
     const tableAncestorLocator = async () => await waitForTableCells(mainBody.querySelector('#scriptWPQ1'))
+    verbose(tableAncestorLocator)
     let tableAncestor = await tableAncestorLocator()
-    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"] > tbody'))
+    verbose(tableAncestor)
+    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"].ms-listviewtable > tbody'))
     let existingTable = await tableLocator()
+    // const locateTable = async () => await waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"].ms-listviewtable > tbody'))
     const rowMap = new Map()
     const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()
-    const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
-        if (existingTable.isConnected) { return };
-        existingTable = await tableLocator()
-        modifyDocumentTables(existingTable)
-        if (!rowMap.size) { return };
-        checkForDuplicateSubs(true)
-    });
-    waitForOldTableToBeDestroyed.observe(tableAncestor, { childList: true, subtree: true });
+    monitorForTableDestruction(existingTable)
+    function monitorForTableDestruction(existingTable) {
+        const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
+            if (existingTable.isConnected) { return };
+            existingTable = await tableLocator()
+            modifyDocumentTables(existingTable)
+            if (!rowMap.size) { return };
+            checkForDuplicateSubs(true)
+        });
+        waitForOldTableToBeDestroyed.observe(tableAncestor, { childList: true, subtree: true });
+    };
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
             case "EDIT": return { caseIdNum: tr?.children[4]?.textContent?.trim(), entryDate: tr?.children[6]?.textContent?.trim() };
@@ -673,7 +708,7 @@ try {
     };
     async function checkForDuplicateSubs(followWithOkEvent) {
         dupeCaseList.replaceChildren()
-        const caseListTrs = Array.from( existingTable?.querySelectorAll('tr') )
+        const caseListTrs = Array.from( existingTable?.querySelectorAll('tr:not(.ms-viewheadertr)') )
         const editMode = editLinkText()
         rowMap.clear()
         caseListTrs.forEach(tr => {
@@ -691,44 +726,69 @@ try {
         compareContainer.style.display = "flex"
         if (followWithOkEvent) { okEvent() };
     };
-
     compareOpenButton.addEventListener('click', () => {
         compareDialog.showModal()
         checkForDuplicateSubs()
         compareResetButton.style.display = "block"
     });
     compareResetButton.addEventListener('click', () => {
-        Array.from( existingTable.querySelectorAll('.duplicateMatch'), ele => ele.classList.remove('duplicateMatch') );
-        Array.from( existingTable.querySelectorAll('.compareMatch'), ele => ele.classList.remove('compareMatch') );
+        Array.from( existingTable.querySelectorAll('tr:is(.duplicateMatch, .compareMatch, .newEntry, .unmatched)'), ele => ele.classList.remove('duplicateMatch', 'compareMatch', 'newEntry', 'unmatched') );
         compareMissingList.replaceChildren()
         dupeCaseList.replaceChildren();
         compareResetButton.style.display = "none"
         compareContainer.style.display = "none"
+        hideButtonContainer.remove()
         matchedCount.textContent = ""
         rowMap.clear()
+    });
+    hideButtonContainer.addEventListener('click', ({ target: clickedButton } = {}) => {
+        switch(clickedButton) {
+            case hideMatchedButton: {
+                if (hideUnmatchedButton.dataset.hiding === "yes") { return };
+                if (hideMatchedButton.dataset.hiding === "no") {
+                    document.head.append(hideMatchedStyle); clickedButton.dataset.hiding = "yes"
+                } else {
+                    hideMatchedStyle.remove(); clickedButton.dataset.hiding = "no"
+                };
+                return;
+            }
+            case hideUnmatchedButton: {
+                if (hideMatchedButton.dataset.hiding === "yes") { return };
+                if (hideUnmatchedButton.dataset.hiding === "no") {
+                    document.head.append(hideUnmatchedStyle);
+                    clickedButton.dataset.hiding = "yes"
+                } else {
+                    hideUnmatchedStyle.remove(); clickedButton.dataset.hiding = "no"
+                };
+                return;
+            }
+            default: break;
+        };
     });
     function okEvent() {
         if (!compareTextarea?.value) { compareDialog.close(); return };
         if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
-        let missingNumbers = []
-        let userCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
-        userCaseList.forEach(caseNum => {
+        let missingCasesFromPasted = []
+        let pastedCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
+        pastedCaseList.forEach(caseNum => {
             let matchedRow = rowMap.get(caseNum)
             if (!matchedRow) {
-                missingNumbers.push(caseNum)
+                missingCasesFromPasted.push(caseNum)
                 return;
             };
             matchedRow?.classList.add('compareMatch')
         });
         compareDialog.close()
         compareMissingList.replaceChildren()
-        compareMissingList.append(...missingNumbers.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
-        matchedCount.textContent = "Match Count: " + (userCaseList.length - missingNumbers.length) + '/' + userCaseList.length
+        compareMissingList.append(...missingCasesFromPasted.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
+        matchedCount.textContent = "Match Count: " + (pastedCaseList.length - missingCasesFromPasted.length) + '/' + pastedCaseList.length
         const editMode = editLinkText()
-        Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch)'), tr => {
+        Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch, .ms-viewheadertr)'), tr => {
             let entryDate = Date.parse(setVarsBasedOnEditMode(editMode, tr).entryDate)
-            if ((today - entryDate) < 2592000000) { tr.classList.add('newEntry') }; // less than 30 days
+            if ((today - entryDate) < 2592000000) { tr.classList.add('newEntry') } // less than 30 days
+            else { tr.classList.add('unmatched') }
         });
+        gbl.eles.navContainer.append(hideButtonContainer)
 
     };
     compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
@@ -829,25 +889,25 @@ async function efcTableVariables(tr) {
 };
 async function modifyDocumentTables(tableBody) {
     let sortedByCaseNum = tableBody?.closest('table')?.querySelector('.ms-headerSortTitleLink:has(+span:not([style="display: none;"]))')?.textContent === "MAXIS" ?? false
-    tableBody = await waitForTableCells(tableBody)
-    if ( modifiedTables.includes(tableBody) ) { return };
-    const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
+    gbl.refVars.currentTbody = await waitForTableCells(tableBody)
+    if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
+    const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
             mainTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
                 if (["DocDisc"].includes(page.alias)) { addClassToNotificationRows(name, tr); addClassToDeletedRows(docBox, tr) };
-                if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(tableBody, lastCaseNum, docBoxCaseNum, tr) };
+                if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(gbl.refVars.currentTbody, lastCaseNum, docBoxCaseNum, tr) };
                 doModifications({ checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId })
             });
         }();
     });
-    modifyTableHeaders(tableBody)
-    modifiedTables.push(tableBody)
+    modifyTableHeaders(gbl.refVars.currentTbody)
+    modifiedTables.push(gbl.refVars.currentTbody)
 };
 async function modifyDocumentTablesEFC(tableBody) {
-    tableBody = await waitForTableCells(tableBody)
-    if ( modifiedTables.includes(tableBody) ) { return };
-    const tableBodyTrs = Array.from(tableBody.querySelectorAll('tr'), tr => {
+    gbl.refVars.currentTbody = await waitForTableCells(tableBody)
+    if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
+    const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
             efcTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
@@ -855,8 +915,8 @@ async function modifyDocumentTablesEFC(tableBody) {
             });
         }();
     });
-    modifyTableHeaders(tableBody)
-    modifiedTables.push(tableBody)
+    modifyTableHeaders(gbl.refVars.currentTbody)
+    modifiedTables.push(gbl.refVars.currentTbody)
 };
 function modifyTableHeaders(tableBody) { Array.from(tableBody.closest('table').querySelectorAll('th > div > a'), aEle => { aEle.textContent = theadSwaps.get(aEle.textContent) ?? aEle.textContent }) };
 function addClassToNotificationRows(name, tr) {
@@ -901,24 +961,30 @@ function modifyReviewed(reviewed) {
 };
 function modifyTitles(title, shortNote) {
     if (!title || !title?.textContent) { return };
-    let titleOrigText = title.textContent
-    let titleRegExText = title.textContent
+    let originalTdText = title.textContent
+    let newTdText = title.textContent
     function modifyBadTitle() {
         if (!shortNote.textContent.length) { return 0 };
-        if (title.textContent?.includes('BULK SCAN')) {
-            replaceChildrenSpan(title, { title: titleOrigText, textContent: shortNote.textContent })
-            shortNote.textContent = ''
+        if (title.textContent?.includes('BULK SCAN') && shortNote.textContent?.includes(' ')) {
+            let bulkNoteTitle = shortNote.textContent.replace(/ (-|incl) DHH?S ?[0-9]{4}[A-Z]?/, "")
+            replaceChildrenSpan(title, { title: originalTdText, textContent: bulkNoteTitle })
+            replaceChildrenSpan(shortNote, { title: shortNote.textContent, textContent: "bulk" })
             return 1
         } else if (title.textContent?.includes('MNB001 Application')) {
             let { appType, remainingShortNote } = determineAppType(shortNote.textContent)
-            replaceChildrenSpan(title, { title: titleOrigText, textContent: appType })
-            shortNote.textContent = remainingShortNote
+            replaceChildrenSpan(title, { title: originalTdText, textContent: appType })
+            replaceChildrenSpan(shortNote, { title: shortNote.textContent, textContent: remainingShortNote })
             return 1
         };
     };
     if (modifyBadTitle()) { return };
-    docTypeSwaps.forEach( ([regX, swap]) => { titleRegExText = titleRegExText.replace(new RegExp(regX, "i"), swap) });
-    replaceChildrenSpan(title, { title: titleOrigText, textContent: titleRegExText })
+    let matches = [...newTdText.matchAll(docTypeRegExp)].map(match => [ match[0], Object.entries(match.groups).filter(([key, val] = []) => val)?.[0]?.[0] ])
+    matches.forEach(([ patternMatch, group ] = []) => {
+        let [ regExPattern, regExReplacement ] = docTypeSwaps[group]
+        let regEx = docTypeSwaps[group][2]; if (!regEx) { regEx = new RegExp(regExPattern); docTypeSwaps[group].push(regEx) };
+        newTdText = newTdText.replace(regEx, regExReplacement)
+    });
+    replaceChildrenSpan(title, { title: originalTdText, textContent: newTdText })
     function determineAppType(shortNoteText) {
         if (shortNoteText.includes("CCAP")) { return { appType: "CCAP Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
         else if (shortNoteText.includes("CAF")) { return { appType: "Combined Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
@@ -926,44 +992,50 @@ function modifyTitles(title, shortNote) {
     };
 };
 function modifyShortNote(shortNote) {
-    if (!shortNote || !shortNote?.textContent) { return };
-    shortNote.title = shortNote.textContent
-    shortNoteSwaps.forEach( ([regX, swap]) => { shortNote.textContent = shortNote.textContent.replace(new RegExp(regX, "i"), swap) });
+    if (!shortNote || !shortNote?.textContent || shortNote?.textContent === "bulk") { return };
+    shortNote.classList.add('shortNote')
+    let originalTdText = shortNote.textContent
+    let newTdText = shortNote.textContent.replace(/\s{3,}/g, '  ') // replace 3+ spaces with 2 //
+    let matches = [...newTdText.matchAll(shortNoteRegExp)].map(match => [ match[0], Object.entries(match.groups).filter(([key, val] = []) => val)?.[0]?.[0] ])
+    matches.forEach(([ patternMatch, group ] = []) => {
+        let [ regExPattern, regExReplacement ] = shortNoteSwaps[group]
+        let regEx = shortNoteSwaps[group][2]; if (!regEx) { regEx = new RegExp(regExPattern); shortNoteSwaps[group].push(regEx) };
+        newTdText = newTdText.replace(new RegExp(regExPattern), regExReplacement)
+    });
+    replaceChildrenSpan(shortNote, { title: originalTdText, textContent: newTdText })
 };
 function modifyName(name) {
     if (!name || !name?.textContent) { return };
     let nameA = name.querySelector('a')
-    let nameNewText = nameA.textContent.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,6})_[0-9-]+/)?.groups?.filenum
+    let nameNewText = nameA?.textContent?.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,})_[0-9-]+/)?.groups?.filenum
     nameA.textContent = "(view_" + (nameNewText ?? "item") + ")"
+    if (nameA.href.slice(-3) === "txt") { nameA.target = "_blank" };
 };
-let selectedHighlight = ""
 function modifyCaseNum(tdCaseNum, tdDocBox, tdCheckbox) {
     if (!tdCaseNum) { return };
-    if (tdDocBox?.textContent && "DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) {
-        // let modDocBox = tdDocBox.textContent
-        highlightEvent(tdDocBox.textContent, tdDocBox.closest('tr'), tdDocBox.closest('tbody'), tdCheckbox)
+    if (!tdCaseNum.textContent) { highlightRemove() };
+    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # //
+        highlightEvent({ highlightClassName: tdDocBox.textContent, tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
         return;
     };
     if (!tdCaseNum.textContent) { return };
-    let modCaseNum = tdCaseNum.textContent?.length > 8 ? tdCaseNum.textContent : tdCaseNum.textContent?.trim()?.split(/^0/)?.reverse()[0] || "" // if not CSE case number, trims leading 0s //
-    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: modCaseNum, style: "cursor: pointer;" })
+    let highlightClassName = tdCaseNum.textContent?.length > 8 ? tdCaseNum.textContent : tdCaseNum.textContent?.trim()?.split(/^0/)?.reverse()[0] || "" // if not CSE case number, trims leading 0s //
+    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassName, style: "cursor: pointer;" })
     tdCaseNum.replaceWith(newLinkTd)
-    modCaseNum && newLinkTd.append(newLinkA, copySymbol())
+    highlightClassName && newLinkTd.append(newLinkA, copySymbol())
     newLinkA?.addEventListener('click', () => { openCaseFile(newLinkA.textContent, "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
         openCaseFile(newLinkA.textContent, "_blank")
     });
-    let tableRow = newLinkTd.closest('tr'), docBoxCaseNumTable = newLinkTd.closest('tbody')
-    modCaseNum && tableRow.classList.add(modCaseNum)
-    highlightEvent(modCaseNum, tableRow, docBoxCaseNumTable, tdCheckbox)
+    let tdTableRow = newLinkTd.closest('tr')
+    highlightClassName && tdTableRow.classList.add(highlightClassName)
+    highlightEvent({ highlightClassName, tdTableRow, tdCheckbox })
 };
 function modifyTaxonomy(taxonomy) {
-    if (!taxonomy || !taxonomy?.textContent) { return };
-    let newTaxonomy = taxonomy.textContent.replace(/^([0-9.]+) ([A-Z]{2,4}) - /g, '$1: $2 ')
-    taxonomy.textContent = getTaxSwap(newTaxonomy.split(':')[0]) ?? newTaxonomy
+    if (!taxonomy || !taxonomy.textContent) { return };
+    replaceChildrenSpan(taxonomy, { title: taxonomy.textContent, textContent: taxonomySwaps.get(taxonomy.textContent) })
 };
-function getTaxSwap(taxonomyNumber) { return taxonomySwaps.get(taxonomyNumber) ?? undefined };
 function modifyDate(originalDate) {
     if (!originalDate || !originalDate.textContent) { return };
     let dateSpan = originalDate.querySelector('span') || originalDate
@@ -978,25 +1050,24 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ MODIFICATIONS END /////////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
-let primaryTableLoc, efcTableLoc
 !function modifyTablesAsLoaded() {
     if (!page.hasOwnProperty('primaryTableLoc')) { return };
-    primaryTableLoc ??= tableLocQuery('primaryTableLoc')
-    if (!primaryTableLoc) { return };
-    primaryTableLoc.classList.add('dpcTableLoc')
-    primaryTableLoc.addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
-    tbodLoadedEles(primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
-    const observer = new MutationObserver(mutations => { tbodLoadedEles(primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
-    observer.observe(primaryTableLoc, { childList: true, subtree: true });
+    gbl.refVars.primaryTableLoc ??= tableLocQuery('primaryTableLoc')
+    if (!gbl.refVars.primaryTableLoc) { return };
+    gbl.refVars.primaryTableLoc.classList.add('dpcTableLoc')
+    gbl.refVars.primaryTableLoc.addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
+    tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
+    const observer = new MutationObserver(mutations => { tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
+    observer.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
 }();
 !function modifyTablesAsLoadedEFC() {
     if (!page.hasOwnProperty('efcTableLoc')) { return };
-    efcTableLoc ??= tableLocQuery('efcTableLoc')
-    efcTableLoc.classList.add('efcTableLoc')
-    if (!efcTableLoc) { return };
-    tbodLoadedElesEFC(efcTableLoc)?.forEach(tbod => { modifyDocumentTablesEFC(tbod) });
+    gbl.refVars.efcTableLoc ??= tableLocQuery('efcTableLoc')
+    gbl.refVars.efcTableLoc.classList.add('efcTableLoc')
+    if (!gbl.refVars.efcTableLoc) { return };
+    tbodLoadedElesEFC(gbl.refVars.efcTableLoc)?.forEach(tbod => { modifyDocumentTablesEFC(tbod) });
     const observer = new MutationObserver(mutations => { tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) }) });
-    observer.observe(efcTableLoc, { childList: true, subtree: true });
+    observer.observe(gbl.refVars.efcTableLoc, { childList: true, subtree: true });
 }();
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
@@ -1025,14 +1096,14 @@ function visualIndicatorIfPdfSelected() {
 };
 function tbodLoadedEles() {
     let tbodArray = page.singleTable
-        ? [ primaryTableLoc.querySelector('tbody') ] // single table: first table body found in primaryTableLoc, no #id //
+        ? [ gbl.refVars.primaryTableLoc.querySelector('tbody') ] // single table: first table body found in primaryTableLoc, no #id //
         : page.alias === "DocDisc" // DocDisc doesn't use 'isloaded' //
-            ? Array.from(primaryTableLoc?.querySelectorAll('tbody:has(>tr.ms-itmhover)'))
-            : Array.from(primaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true") // multiple tables: all tbody elements with #id that starts with tbod //
+            ? Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody:has(>tr.ms-itmhover)'))
+            : Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true") // multiple tables: all tbody elements with #id that starts with tbod //
     return tbodArray;
 };
 function tbodLoadedElesEFC() {
-    return Array.from(efcTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
+    return Array.from(gbl.refVars.efcTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
 };
 
 
@@ -1057,18 +1128,20 @@ function createSlider({ textContent, title, id, checked, fontSize, classes: extr
     let toggleSlider = createNewEle('div', { classList: ["toggle-slider", extraClasses].join(' '), style: extraStyles })
     toggleSlider.append(
         ...arrangeElements(
-            [createNewEle('label', { title, textContent }),
-             createNewEle('label', { classList: "switch", style: (fontSize && "font-size: " + fontSize + ";") }),
-             [createNewEle('input', { type: "checkbox", id, checked }),
-              createNewEle('span', { classList: "slider round" })
+            [createNewEle('span', { textContent }),
+             createNewEle('label', { title, for: id }),
+             [createNewEle('label', { classList: "switch", style: (fontSize && "font-size: " + fontSize + ";") }),
+              [createNewEle('input', { type: "checkbox", id, checked }),
+               createNewEle('span', { classList: "slider round" })
+              ]
              ]
             ]
         )
     );
     return toggleSlider;
 };
-function replaceChildrenSpan(td, {title, textContent}={}) {
-    td.replaceChildren( createNewEle('span', { title, textContent }) )
+function replaceChildrenSpan(td, spanProperties) {
+    td.replaceChildren( createNewEle('span', spanProperties) )
 };
 
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
@@ -1123,27 +1196,28 @@ function addStyling(ele, styleObj) {
     if (!ele) { return };
     Object.entries(styleObj).forEach(([property, value] = []) => { ele.style[property] = value });
 };
-async function countDocs() {
+async function countDocs() { // For those pages where no total doc count exists, adds the count to the link located directly above the table //
     let docTableArea = tableLocQuery('primaryTableLoc'), docTable = await waitForEleWithAncestor('table[summary="Document Processing Center"] > tbody', docTableArea),
         currentPageLink = mainBody.querySelector('a.ms-pivotControl-surfacedOpt-selected')
     if (!currentPageLink) { return };
     currentPageLink.textContent = currentPageLink?.textContent + " (" + (docTable.querySelectorAll('tr').length ?? '') + ")"
 };
-function highlightAdd(locateClass, locateTable) {
-    const trMatched = locateTable?.getElementsByClassName(locateClass)
+function highlightAdd(highlightClassName, currentTbody) {
+    const trMatched = currentTbody?.getElementsByClassName(highlightClassName)
     Array.from(trMatched, tr => { tr.classList.add('selectedDocs')} );
     highlightClickCount(trMatched.length)
 };
-function highlightEvent(rowLocateClass, locateRow, locateTable, tdCheckbox) {
-    locateRow.classList.add(rowLocateClass)
-    locateRow.addEventListener('click', highlightOnClickEvent);
+function highlightEvent({ highlightClassName, tdTableRow, tdCheckbox } = {}) {
+    highlightClassName && tdTableRow.classList.add(highlightClassName)
+    tdTableRow.addEventListener('click', highlightOnClickEvent);
     tdCheckbox?.addEventListener('click', highlightOnClickEvent);
+    let currentTbody = gbl.refVars.currentTbody
     function highlightOnClickEvent(clickEvent) {
-        if (rowLocateClass === selectedHighlight && !locateRow.className?.includes('s4-itm-selected') && locateRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
-        selectedHighlight = rowLocateClass
+        if (highlightClassName === gbl.refVars.highlight.selectedClass && !tdTableRow.className?.includes('s4-itm-selected') && tdTableRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
+        gbl.refVars.highlight.selectedClass = highlightClassName // sets global variable //
         highlightRemove()
-        if (locateRow.className?.includes('s4-itm-selected')) { return highlightClickCount(''); };
-        highlightAdd(rowLocateClass, locateTable)
+        if (tdTableRow.className?.includes('s4-itm-selected')) { return highlightClickCount(''); };
+        highlightAdd(highlightClassName, currentTbody)
     };
 };
 function highlightRemove() { Array.from(mainBody.querySelectorAll('tr.selectedDocs'), tr => { tr.classList.remove('selectedDocs') }); };
@@ -1172,7 +1246,7 @@ async function highlightClickCount(rowCount) {
 function toggleSliderVisibility(isChecked, styleName) {
     switch(isChecked) {
         case true: gbl.eles[styleName].textContent = "." + styleName + " { display: none; }"; break;
-        case false: gbl.eles[styleName].textContent = "." + styleName + " { display: table-row; }"; break;
+        case false: gbl.eles[styleName].textContent = "." + styleName + ""; break;
     };
 };
 function toggleVisible(element, trueFalse) {
