@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.24
+// @version      0.0.25
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -16,7 +16,6 @@ console.time('CaseWonks load time')
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
 const mainBody = window.parent.document.body, thisPageName = window.location.pathname.split("/")?.reverse()[0].replaceAll("%20", ""),
       ribbon = document.getElementById('RibbonContainer')
-
 const sanitize = {
     evalText(text) { return String(text)?.replace(/\\/g,'').trim() },
     query(query, all = 0) {
@@ -102,12 +101,14 @@ const page = new Map([
     ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
     ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
     ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"]', singleTable: 1 }],
-    ['author.aspx', { alias: 'Author',primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
-    ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet',primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
+    ['author.aspx', { alias: 'Author', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
+    ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
     ['Print2NCT.aspx', { alias: 'Print', }],
     ['Scan.aspx', { alias: 'Scan' }],
     ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
     ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['MyRecentEFCDocuments30days.aspx', { alias: 'RecentEFC', primaryTableLoc: 'td#scriptWPQ2 > table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
+    ['AllDocsEFC90days.aspx', { alias: 'AllEFCNinetyDays', primaryTableLoc: 'td#scriptWPQ2 > table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
     ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fse' }],
     ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'sse' }],
     ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'cse' }],
@@ -255,20 +256,18 @@ const shortNoteSwaps = { // Assume the space after an email address is not a whi
     itemId: ["Item ID\\:[0-9]+ not found\\.", ""],
     inclDHS: [" incl DHS ?[0-9]{4}\\w?$", ""],
     oldDHSform: [" - DHS ?[0-9]{4}\\w?$", ""],
-    movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time, "$1: $2, $3"],
-    // movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time, "$1 from $2 on $3"],
-    sentPubPort: ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (" + patterns.date + ") " + patterns.time, (fullStr, dateMatch) => "Rec'd: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") ],
-    checkedIn: ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + "."],
-    recdPubPort: ["Public Portal - " + patterns.emailSpace + "was sent this on (" + patterns.date + ") " + patterns.time, (fullStr, dateMatch) => "Sent: Portal " + dateFuncs.formatDate(dateMatch, "mdyy") ],
-    sysAcctRecd: ["A[0-9]{9,10}_([A-Z]+)[0-9_]+(?:[A-Za-z]+_)?(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time, "$1 $2 rec'd: $3"],
-    doc_of_: ["[0-9]{9,10}_doc\\dof\\d__", ""],
     recdVia: ["\\.Received via", ". Rec'd: "],
     sentVia: ["\\.Sent via", ". Sent: "],
-    // faxTo: ["\\*TO:[\\s\\\xA0]*\\+?" + patterns.phone + " ", ""],
-    faxToFrom: ["\\*TO:[\\s\\\xA0]*\\+?" + patterns.phone + " FROM:[\\s\\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain + "(?: eFax)?", "Fax: $1."],
-    // faxFrom: ["FROM:[\\s\\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain, "Fax: $1."],
+    movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1: $2, $3. "],
+    sentPubPort: ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (?<date>" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal in: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
+    // sentPubPort: ["(?<period>\\.)?Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (?<date>" + patterns.date + ") " + patterns.time + "\\.", (...result) => { result.reverse(); return (result[0].period && ". ") + "Rec'd: Portal " + dateFuncs.formatDate(result[0].date, "mdyy") + ". " }],
+    checkedIn: ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + ". "],
+    recdPubPort: ["Public Portal - " + patterns.emailSpace + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal out: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
+    sysAcctRecd: ["A[0-9]{9,10}_([A-Z]+)[0-9_]+(?:[A-Za-z]+_)?(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time + "\\.", "$1 $2 rec'd: $3. "],
+    doc_of_: ["[0-9]{9,10}_doc\\dof\\d__", ""],
+    faxToFrom: ["\\*TO:[\\s\\\xA0]*\\+?" + patterns.phone + " FROM:[\\s\\\xA0]*(" + patterns.phone + ")" + patterns.faxAgain + "(?: eFax)?", "Fax: $1. "],
     webDoc: ["^Web$", "(Website import)"],
-    autoCopy: ["Auto-Copy from ([A-Z]{3}): (?:SSN|MAXIS) match", "Auto-copy ($1)"],
+    autoCopy: ["Auto-Copy from ([A-Z]{3}): (?:SSN|MAXIS) match", "Auto-copy ($1). "],
     // groupName: ["", ""],
 };
 
@@ -335,13 +334,14 @@ const gbl = {
         caseDocsNewTabButton: createNewEle('button', { textContent: "GO", style: "line-height: inherit; padding: 0 8px; margin-left: 10px; min-width: unset; font-size: 10px", }),
         caseHistory: createNewEle('datalist', { id: "caseHistory", style: "visibility: hidden;" }),
         caseWonksVersion: createNewEle('div', { id: "caseWonksVersion", textContent: GM_info.script.name + ' v' + GM_info.script.version }),
-        clickedCount: createNewEle('span', { id: "clickedCount" })
+        clickedCount: createNewEle('span', { id: "clickedCount" }), clickedCountCont: createNewEle('span', { id: "clickedCountCont", style: "position: absolute; right: 15%; bottom: 0; font-size: 10pt; color: light-dark(#222, #efefef) !important;" } ), docCountText: createNewEle('span', { textContent: "Doc Count: " }),
     },
     refVars: {
         currentTbody: undefined, primaryTableLoc: undefined, efcTableLoc: undefined,
         highlight: { selectedClass: "" },
     },
 };
+gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
 
 const caseData = (() => { // used for case history and fixing page title // fse, mse correct //
     if (page.alias !== "CaseFile") { return };
@@ -525,14 +525,28 @@ const caseData = (() => { // used for case history and fixing page title // fse,
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////// PAGE_SPECIFIC SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 !function pageSpecificChanges() {
-try {
-!function AllItems() {
-    if (page.alias !== "AllItems") { return };
+    try {
+        switch(page.alias) {
+            case "AllItems": { AllItems(); break; }
+            case "CaseFile": { CaseFile(); break; }
+            case "DocBox": { DocBox(); break; }
+            case "DocDisc": { DocDisc(); break; }
+            case "eSign": { eSign(); break; }
+            case "Home": { HomePage(); break; }
+                // case "Scan": { Scan(); break; }
+            case "Subs": { Subs(); break; }
+            default: break;
+        };
+        // Scan, Subscription:
+        // 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
+    } catch(err) { console.info(err) };
+}();
+function AllItems() {
     countDocs()
     //slider to hide pending?
-}();
-!function CaseFile() {
-    if (page.alias !== "CaseFile" || !caseData.caseNum) { return };
+};
+function CaseFile() {
+    if (!caseData.caseNum) { return };
     !function fixPageTitle() {
         document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
     }();
@@ -541,14 +555,12 @@ try {
         if (!taxSwapMatch) { return };
         tdTextChild.textContent = " : " + taxSwapMatch + " "
     });
-}();
-!function DocBox() {
-    if (page.alias !== "DocBox") { return };
+};
+function DocBox() {
     countDocs()
     //slider to hide pending?
-}();
-!function DocDisc() {
-    if (page.alias !== "DocDisc") { return };
+};
+function DocDisc() {
     mainBody.querySelector('.GoTd')?.removeAttribute('rowspan')
     document.head.append( createNewEle('style', { textContent: ".DDTable { & td:not(:has(input, a)) { text-align: right; } & td:has(select) { padding: 0 !important; } td.GoTd { position: unset; margin: 0; } } h2 { display: flex; gap: 40px; align-items: center; padding: 0 3px !important; & > a { border: none !important; } }" }) )
 
@@ -556,14 +568,13 @@ try {
     const fromCaseFile = document.referrer.includes("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Case%20File.aspx") ? "checked" : ""
 
     gbl.eles.hideNotificationsSlider = createSlider({ textContent: "Hide Notifications", title: "Show or Hide 'Notification' rows.", checked: fromCaseFile, id: "hideNotificationsSliderCheck" })
-    gbl.eles.hideNotifications = fromCaseFile === "checked" ? createNewEle('style', { textContent: ".hideNotifications { display: none; }" }) : createNewEle('style', { textContent: "" })
-    gbl.eles.hideNotificationsSlider.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideNotifications") });
+    gbl.eles.hideNotificationsStyle = addCSSStyleSheet(fromCaseFile === "checked" ? ".hideNotifications { display: none; }" : ".hideNotifications {}")
+    gbl.eles.hideNotificationsSlider?.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideNotifications", gbl.eles.hideNotificationsStyle) });
 
     gbl.eles.hideDeletedSlider = createSlider({ textContent: "Hide Deleted", title: "Show or Hide 'DeletedDPC' rows.", checked: "checked", id: "hideDeletedSliderCheck" })
-    gbl.eles.hideDeleted = createNewEle('style', { textContent: ".hideDeleted { display: none; }" })
-    gbl.eles.hideDeletedSlider.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideDeleted") });
+    gbl.eles.hideDeletedStyle = addCSSStyleSheet(".hideDeleted { display: none; }")
+    gbl.eles.hideDeletedSlider?.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideDeleted", gbl.eles.hideDeletedStyle) });
 
-    mainBody.append(gbl.eles.hideNotifications, gbl.eles.hideDeleted)
     gbl.eles.navContainer?.append(gbl.eles.hideNotificationsSlider, gbl.eles.hideDeletedSlider)
 
     setTimeout(() => {
@@ -572,7 +583,7 @@ try {
     }, 500);
 
     function selectNotifications() {
-        gbl.eles.selectNotifications = createNewEle('button', { type: "button", textContent: "Select Notifications", style: "color: light-dark(#222, #efefef);" })
+        gbl.eles.selectNotifications = createNewEle('button', { type: "button", textContent: "Select Notifications", style: "color: light-dark(#222, #efefef); border-radius: 6px; padding: 5px 10px;" })
         dpcH2.append(gbl.eles.selectNotifications)
         gbl.eles.selectNotifications.addEventListener('click', () => {
             document.querySelector('.s4-itm-selected') && doClick(document.querySelector('.s4-itm-selected'))
@@ -580,13 +591,11 @@ try {
         });
     };
 
-}();
-!function eSign() {
-    if (page.alias !== "eSign") { return };
+};
+function eSign() {
     countDocs()
-}();
-!function HomePage() {
-    if (page.alias !== "Home") { return };
+};
+function HomePage() {
     !function shrinkHomePageMessage() {
         const messageTr = mainBody.querySelector('.ms-rtestate-field > div')?.closest('tr')
         if (messageTr && (/^[\u200b\n]+$/).test(messageTr.innerText)) { messageTr.style.display = "none" } // ​ is copied from the page // unicode is \u200b // (/^​\n+​$/) //
@@ -594,37 +603,32 @@ try {
             Array.from(mainBody.querySelectorAll('.ms-rtestate-field div'))?.filter(div => div.textContent.length < 5)?.forEach( emptyDiv => emptyDiv.remove() )
         };
     }();
-    // !function shrinkHomePageMessage() { Array.from(mainBody.querySelectorAll('.ms-rtestate-field div'))?.filter(div => div.textContent.length < 5)?.forEach( emptyDiv => emptyDiv.remove() ) }();
     !function setUserName() {
         const userName = mainBody.querySelector('.ms-webpart-chrome:has(span[title="My DocBox - Document Processing Center library"]) table table tbody[groupstring]').getAttribute('groupstring').replaceAll('%3B%23', '')
         caseWonksDataSet.updateInfo("data", "userName", userName)
     }();
-}();
-!function Scan() {
-//     if (page.alias !== "Scan") { return };
+};
+function Scan() {
 //     !function updateFieldsForCCAP() {
 //         const scanEles = {
-//             docType: { ele: document.getElementById("ctl00_PlaceHolderMain_DocType_ctl00_TextField"), value: "FSE774 CCAP-Wkr Income Calc" },
+//             docType: { ele: document.getElementById("ctl00_PlaceHolderMain_DocType_ctl00_TextField"), newVal: "FSE774 CCAP-Wkr Income Calc" },
 //             docBox: { ele: document.getElementById("ctl00_PlaceHolderMain_DocBox_DropDownChoice") },
-//             fileToEFC: { ele: document.getElementById("ctl00_PlaceHolderMain_File_x0020_to_x0020_EFC_DropDownChoice"), value: "Yes" },
+//             fileToEFC: { ele: document.getElementById("ctl00_PlaceHolderMain_File_x0020_to_x0020_EFC_DropDownChoice"), newVal: "Yes" },
 //             shortNote: { ele: document.getElementById("ctl00_PlaceHolderMain_Short_x0020_Note_x002F_Next_x0020_Step_ctl00_TextField") },
 //         };
-//         // triggerFnOnSelectChange(scanEles.docBox.ele, checkAndUpdateFields)
-//         verbose(scanEles.docBox.ele.value)
-//         scanEles.docBox.ele.addEventListener('change', checkAndUpdateFields)
-//         function checkAndUpdateFields(changeEvent) {
-//             verbose(changeEvent.isTrusted)
-//             // if (changeEvent.isTrusted) { return };
-//             if (scanEles.docType.ele.value === scanEles.docType.value) {
+//         triggerEventOnValueAssigned(scanEles.docBox.ele)?.addEventListener('valueassigned', () => checkAndUpdateFields) // doesn't trigger - might have event that prevents propagation? //
+//         // triggerEventOnValueAssigned(scanEles.docBox.ele)?.addEventListener('valueassigned', ({ value: detail } = {}) => checkAndUpdateFields)
+//         function checkAndUpdateFields() {
+//             verbose('check and update fields')
+//             if (scanEles.docType.ele.value === scanEles.docType.newVal) {
 //                 if (caseWonksDataSet?.data.userName) { scanEles.docBox.ele.value = caseWonksDataSet.data.userName };
-//                 scanEles.fileToEFC.ele.value = scanEles.fileToEFC.value
+//                 scanEles.fileToEFC.ele.value = scanEles.fileToEFC.newVal
 //                 scanEles.shortNote.ele.select()
 //             };
 //         };
-//     }();
-}();
-!async function Subs() {
-    if (page.alias !== "Subs") { return };
+    // }();
+};
+async function Subs() {
     const compareOpenButton = createNewEle('button', { type: "button", textContent: "Compare" }),
           compareResetButton = createNewEle('button', { type: "button", textContent: "Reset", style: "display: none;" }),
           hideButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px;" }),
@@ -681,16 +685,13 @@ try {
     );
     let today = Date.now()
     const tableAncestorLocator = async () => await waitForTableCells(mainBody.querySelector('#scriptWPQ1'))
-    verbose(tableAncestorLocator)
     let tableAncestor = await tableAncestorLocator()
-    verbose(tableAncestor)
-    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"].ms-listviewtable > tbody'))
-    let existingTable = await tableLocator()
-    // const locateTable = async () => await waitForTableCells(tableAncestor.querySelector('table[summary="Subscription"].ms-listviewtable > tbody'))
-    const rowMap = new Map()
     const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()
+    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('#spgridcontainer_WPQ1_leftpane_mainTable > tbody') ?? tableAncestor.querySelector('table[summary] > tbody'))
+    let existingTable = await tableLocator()
+    const rowMap = new Map()
     monitorForTableDestruction(existingTable)
-    function monitorForTableDestruction(existingTable) {
+    function monitorForTableDestruction() {
         const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
             if (existingTable.isConnected) { return };
             existingTable = await tableLocator()
@@ -767,6 +768,7 @@ try {
     });
     function okEvent() {
         if (!compareTextarea?.value) { compareDialog.close(); return };
+        compareTextarea.value = compareTextarea.value.trim().replace(/\n/g, '')
         if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
         let missingCasesFromPasted = []
         let pastedCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
@@ -780,7 +782,7 @@ try {
         });
         compareDialog.close()
         compareMissingList.replaceChildren()
-        compareMissingList.append(...missingCasesFromPasted.map(caseNum => createNewEle('div', { textContent: caseNum }) ))
+        compareMissingList.append(...missingCasesFromPasted.map(caseNum => createNewEle('div', { textContent: caseNum + "," }) ))
         matchedCount.textContent = "Match Count: " + (pastedCaseList.length - missingCasesFromPasted.length) + '/' + pastedCaseList.length
         const editMode = editLinkText()
         Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch, .ms-viewheadertr)'), tr => {
@@ -794,11 +796,7 @@ try {
     compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
     compareOkButton.addEventListener('click', okEvent);
     compareCancelButton.addEventListener('click', () => { compareDialog.close(); });
-}();
-// Scan, Subscription:
-// 	Next to DocBox dropdown: Add a button with user's name which onclick changes dropdown to username?
-} catch(err) { console.info(err) };
-}();
+};
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ PAGE_SPECIFIC SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
@@ -830,6 +828,7 @@ function foldableCodeStorageArea() {
 //         default: return {};
 //     }
 // })();
+
 };
 const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); snackBar(clickEvent.target.previousElementSibling?.textContent, "Copied", true); clickEvent.target.style.filter = 'invert(1)'; setTimeout(() => { clickEvent.target.style.filter = "unset"; }, 2000); }, })
 let lastCaseNum = ""
@@ -837,33 +836,42 @@ async function mainTableVariables(tr) {
     let checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId
     switch(editionCode) {
         case "fse":
-            if (["Home"].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["AllItems", "Pending", "WorkingDocs",].includes(page.alias)) { [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, createdBy ] = tr.children };
-            if (["DocBox"].includes(page.alias)) { [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["eSign"].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-            if (["AllDpcDocs"].includes(page.alias)) { [ checkbox,,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum ] = tr.children };
-            if (["DocDisc"].includes(page.alias)) { [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, docBoxCaseNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children };
-            if (["Subs"].includes(page.alias)) {
-                switch(mainBody.querySelector('#scriptWPQ1 #Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()) {
-                    case "EDIT": [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
-                    case "STOP": [,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
-                };
-            };
-            break;
+            switch(page.alias) {
+                case "Home": [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "CaseFile": [,,, title, name, uselessMenu, firstName, lastName, shortNote,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "Pending":
+                case "WorkingDocs":
+                case "AllItems": [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, createdBy ] = tr.children; break;
+                case "DocBox": [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "eSign": [ checkbox,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children; break;
+                case "AllDpcDocs": [ checkbox,,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum ] = tr.children; break;
+                case "DocDisc": [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, docBoxCaseNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children; break;
+                case "RecentEFC":
+                case "AllEFCNinetyDays": [ checkbox,, title, name,, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy, modifiedDate, modifiedBy ] = tr.children; break;
+                case "Subs":
+                    switch(mainBody.querySelector('#scriptWPQ1 #Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')?.textContent?.toUpperCase()) {
+                        case "EDIT": [,,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+                        case "STOP": [,,,,, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
+                    }; break;
+                default: break;
+            }; break;
         case "mse":
-            if (["Home"].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["CaseFile"].includes(page.alias)) { [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["DocBox", "Author", ].includes(page.alias)) { [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["WorkingDocs",].includes(page.alias)) { [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy ] = tr.children };
-            if (["AllItems", ].includes(page.alias)) { [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
-            if (["eSign"].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, taxonomy,,, modifiedDate, modifiedBy ] = tr.children };
-            if (["DocDisc"].includes(page.alias)) { [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, intCase, docBoxCaseNum,, taxonomy, createdDate, receivedDate ] = tr.children };
-            if (["DocDiscDPC", ].includes(page.alias)) { [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, intCase, docBoxCaseNum, taxonomy, createdDate ] = tr.children };
-            if (["ViewbyDocSet", ].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children };
-            if (["PendingStatus", ].includes(page.alias)) { [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children };
-            break;
-
+            switch(page.alias) {
+                case "Home": [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, mnsureId, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "CaseFile": [,,, title, name, uselessMenu, firstName, lastName, shortNote,,,, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "Author":
+                case "DocBox": [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "WorkingDocs": [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy ] = tr.children; break;
+                case "AllItems": [ checkbox,,, reviewed, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children; break;
+                case "eSign": [ checkbox,,, title, name, uselessMenu, firstName, lastName,, shortNote, intCase, taxonomy,,, modifiedDate, modifiedBy ] = tr.children; break;
+                case "DocDisc": [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, intCase, docBoxCaseNum,, taxonomy, createdDate, receivedDate ] = tr.children; break;
+                case "DocDiscDPC": [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, intCase, docBoxCaseNum, taxonomy, createdDate ] = tr.children; break;
+                case "ViewbyDocSet": [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, receivedDate, createdBy ] = tr.children; break;
+                case "PendingStatus": [ checkbox,,, title, name, uselessMenu, firstName, lastName, shortNote, intCase, taxonomy, createdDate, createdBy, receivedDate ] = tr.children; break;
+                case "RecentEFC":
+                case "AllEFCNinetyDays": [ checkbox,, title, name,, firstName, lastName, shortNote, intCase, mnsureId, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy, modifiedDate, modifiedBy ] = tr.children; break;
+                default: break;
+            }; break;
         case "cse":
             break;
         case "sse":
@@ -893,7 +901,7 @@ async function modifyDocumentTables(tableBody) {
     if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
     const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
-            if (tr.querySelector('th')) { return };
+            if (tr.querySelector('th')) { return }; // because some table headers are in the table body //
             mainTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
                 if (["DocDisc"].includes(page.alias)) { addClassToNotificationRows(name, tr); addClassToDeletedRows(docBox, tr) };
                 if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(gbl.refVars.currentTbody, lastCaseNum, docBoxCaseNum, tr) };
@@ -1002,20 +1010,21 @@ function modifyShortNote(shortNote) {
         let regEx = shortNoteSwaps[group][2]; if (!regEx) { regEx = new RegExp(regExPattern); shortNoteSwaps[group].push(regEx) };
         newTdText = newTdText.replace(new RegExp(regExPattern), regExReplacement)
     });
+    newTdText = newTdText.replace(/(?<=[a-z])\.(?=[A-Z])(?![A-Za-z.]+\@)/g, ". ")
     replaceChildrenSpan(shortNote, { title: originalTdText, textContent: newTdText })
 };
 function modifyName(name) {
     if (!name || !name?.textContent) { return };
     let nameA = name.querySelector('a')
-    let nameNewText = nameA?.textContent?.match(/^[A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+__(?<filenum>[0-9]{5,})_[0-9-]+/)?.groups?.filenum
+    let nameNewText = nameA?.textContent?.match(/^([A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+|Portal\d00 General [A-Z][a-z]|RG3F01\d IM MNS R3 39)__(?<filenum>[0-9]{4,})_[0-9-]+/)?.groups?.filenum
     nameA.textContent = "(view_" + (nameNewText ?? "item") + ")"
-    if (nameA.href.slice(-3) === "txt") { nameA.target = "_blank" };
+    if (nameA.href.indexOf("Notification%20-%20Actio__") > -1 || nameA.href.slice(-3) === "txt") { nameA.target = "_blank" };
 };
 function modifyCaseNum(tdCaseNum, tdDocBox, tdCheckbox) {
     if (!tdCaseNum) { return };
     if (!tdCaseNum.textContent) { highlightRemove() };
-    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # //
-        highlightEvent({ highlightClassName: tdDocBox.textContent, tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
+    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # // removes spaces as it's by docbox, which can have spaces //
+        highlightEvent({ highlightClassName: tdDocBox.textContent.replace(" ", ""), tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
         return;
     };
     if (!tdCaseNum.textContent) { return };
@@ -1124,7 +1133,7 @@ function arrangeElements(elementArray) {
 		});
 	};
 };
-function createSlider({ textContent, title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
+function createSlider({ textContent="", title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
     let toggleSlider = createNewEle('div', { classList: ["toggle-slider", extraClasses].join(' '), style: extraStyles })
     toggleSlider.append(
         ...arrangeElements(
@@ -1192,6 +1201,12 @@ async function waitForEleWithAncestor(awaitedEleStr, anchorEle=document.body) {
         };
     });
 };
+function addCSSStyleSheet(rules) {
+    const newStyleSheet = new CSSStyleSheet();
+    rules && newStyleSheet.replaceSync(rules)
+    document.adoptedStyleSheets.push(newStyleSheet)
+    return newStyleSheet;
+};
 function addStyling(ele, styleObj) {
     if (!ele) { return };
     Object.entries(styleObj).forEach(([property, value] = []) => { ele.style[property] = value });
@@ -1204,8 +1219,11 @@ async function countDocs() { // For those pages where no total doc count exists,
 };
 function highlightAdd(highlightClassName, currentTbody) {
     const trMatched = currentTbody?.getElementsByClassName(highlightClassName)
-    Array.from(trMatched, tr => { tr.classList.add('selectedDocs')} );
     highlightClickCount(trMatched.length)
+    Array.from(trMatched, tr => { tr.classList.add('selectedDocs')} );
+};
+function highlightRemove() {
+    Array.from(mainBody.querySelectorAll('tr.selectedDocs'), tr => { tr.classList.remove('selectedDocs') });
 };
 function highlightEvent({ highlightClassName, tdTableRow, tdCheckbox } = {}) {
     highlightClassName && tdTableRow.classList.add(highlightClassName)
@@ -1220,33 +1238,14 @@ function highlightEvent({ highlightClassName, tdTableRow, tdCheckbox } = {}) {
         highlightAdd(highlightClassName, currentTbody)
     };
 };
-function highlightRemove() { Array.from(mainBody.querySelectorAll('tr.selectedDocs'), tr => { tr.classList.remove('selectedDocs') }); };
 async function highlightClickCount(rowCount) {
-    if (document.getElementById('clickedCount')) { gbl.eles.clickedCount.textContent = rowCount; return; };
-    const modalObserver = new MutationObserver(() => {
-        if (ribbon.querySelector('#NCTCaseWorksGroup > .ms-cui-groupContainer > .ms-cui-groupTitle')) {
-            if (!gbl.eles.clickedCount.isConnected) { attachClickedCount() };
-            modalObserver.disconnect()
-        };
-        gbl.eles.clickedCount.textContent = rowCount
-    });
-    modalObserver.observe(ribbon, { childList: true, subtree: true });
-    function attachClickedCount() {
-        ribbon.querySelector('#NCTCaseWorksGroup > .ms-cui-groupContainer > .ms-cui-groupTitle')?.append(
-            ...arrangeElements(
-                [createNewEle('span', { id: "clickedCountCont", style: "position: absolute; right: 15%; bottom: 0; font-size: 10pt; color: light-dark(#222, #efefef) !important;" } ),
-                 [createNewEle('span', { textContent: "Doc Count: " }),
-                  gbl.eles.clickedCount
-                 ],
-                ]
-            )
-        );
-    };
+    gbl.eles.clickedCount.textContent = rowCount;
+    if (!gbl.eles.clickedCountCont.isConnected) { waitForEleWithAncestor('#NCTCaseWorksGroup > .ms-cui-groupContainer > .ms-cui-groupTitle', ribbon).then(ribbonEle => ribbonEle.append( gbl.eles.clickedCountCont )) };
 };
-function toggleSliderVisibility(isChecked, styleName) {
+function toggleSliderVisibility(isChecked, styleName, styleSheet) {
     switch(isChecked) {
-        case true: gbl.eles[styleName].textContent = "." + styleName + " { display: none; }"; break;
-        case false: gbl.eles[styleName].textContent = "." + styleName + ""; break;
+        case true: styleSheet.replaceSync("." + styleName + " { display: none; }"); break;
+        case false: styleSheet.replaceSync("." + styleName + " {}"); break;
     };
 };
 function toggleVisible(element, trueFalse) {
@@ -1257,31 +1256,20 @@ function unhideElement(element, trueFalse) { // true to remove hidden, false to 
     element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
     element.forEach( ele => { ele = sanitize.query(ele); trueFalse ? ele.classList.remove('hidden') : ele.classList.add('hidden') } );
 };
-
-function triggerFnOnInputChange(inputEle, triggerFn) {
-    if (!inputEle) { return };
-    const { get, set } = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-    Object.defineProperty(inputEle, 'value', {
+function triggerEventOnValueAssigned(ele) { // triggers on: input (user, program), select (program) // works in MEC2, does not work in CW. The CW change is probably set to not bubble/stopProp //
+    ele = sanitize.query(ele)
+    if (!ele) { return };
+    const { get, set } = Object.getOwnPropertyDescriptor(ele.constructor.prototype, 'value');
+    Object.defineProperty(ele, 'value', {
         get() { return get.call(this) },
         set(newValue) {
             set.call(this, newValue); // Set the actual value using the native setter //
-            triggerFn()
-            // this.dispatchEvent(new Event('input', { bubbles: true }));
+            this.dispatchEvent(new CustomEvent('valueassigned', { detail: newValue }));
         },
+        configurable: true,
+        enumerable: true,
     });
-};
-function triggerFnOnSelectChange(selectEle, triggerFn) {
-    if (!selectEle) { return };
-    const { get, set } = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
-    Object.defineProperty(selectEle, 'value', {
-        get() { return get.call(this) },
-        set(newValue) {
-            console.log("this works")
-            set.call(this, newValue); // Set the actual value using the native setter //
-            triggerFn()
-            // this.dispatchEvent(new Event('input', { bubbles: true }));
-        },
-    });
+    return ele;
 };
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ FUNCTION_LIBRARY SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
