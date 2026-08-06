@@ -9,7 +9,7 @@ Q: I work in the ___ Edition, will it work for me?
 A: If it doesn't, I'll do my best to make it work.
   
 Q: What does it do?  
-A: Mostly changes words. Also adds some links. Eventually more things.
+A: Mostly changes words and adds some links. Eventually more things.
 <img width="1200" alt="CaseWorks Home Page" src="https://github.com/user-attachments/assets/bcab583f-127e-4e33-83c7-420bd629758e" />
 
 
@@ -25,7 +25,7 @@ Tip: Right click links and then click "Open link in new tab". Tabs can be closed
      <img width="800" alt="Edge TM Post-Install" src="https://github.com/user-attachments/assets/ff1e1f10-4ee8-42dc-8f83-a451f3c56586" />
 
 2. Open [CaseWonks install](https://github.com/MECH2-at-Github/CaseWorks/raw/refs/heads/main/CaseWonks.user.js) and click the [ Install ] button.  
-3. Install [Stylus](https://chromewebstore.google.com/detail/stylus/clngdbkpkpeebahjckkjfobafhncgmne). (Ignore the fact that this is the Chrome store. Edge is a Chromium browser, so it will install and work.)
+3. Install [Stylus](https://chromewebstore.google.com/detail/stylus/clngdbkpkpeebahjckkjfobafhncgmne). (Ignore the fact that this is the Chrome store. Edge is a Chromium browser, so it will install and work. Do NOT install Stylus from the Edge store. It is not the same extension and will not work.)
 4. Open the [style install page](https://userstyles.world/style/27371/default-slug) and click the [ Install ] button to the bottom right of the image.  
 On the next page, click the [ Install Style ] button in the upper left. <img width="600" alt="style sheet install" src="https://github.com/user-attachments/assets/ed4dd0cb-e03d-4315-8b43-5b5fc81ef9fc" />
 
