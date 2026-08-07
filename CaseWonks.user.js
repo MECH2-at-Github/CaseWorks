@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.26
+// @version      0.0.27
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -313,7 +313,6 @@ const shortNoteSwaps = { // Assume the space after an email address is not a whi
     sentVia: ["\\.Sent via", ". Sent: "],
     mergedDeleted: ["This document was merged with another document and the user selected Delete Original Document\\.", "Doc merged; original deleted. "],
     movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", (match, movedCopied, source, date) => movedCopied + ": " + source + " " + dateFuncs.formatDate(date, "mdyy") + ". "],
-    // movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1: $2, $3. "],
     sentPubPort: ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (?<date>" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal in: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
     checkedIn: ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + ". "],
     recdPubPort: ["Public Portal - " + patterns.emailSpace + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal out: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
@@ -746,9 +745,9 @@ async function Subs() {
     const rowMap = new Map()
     monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor, ifTableDestroyed)
     function ifTableDestroyed(newTable) {
-        if (!rowMap.size) { return };
-        checkForDuplicateSubs(true)
         existingTable = newTable
+        if (!rowMap.size) { return }; // if not already done, don't auto run check //
+        checkForDuplicateSubs(true)
     };
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
