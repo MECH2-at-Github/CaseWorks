@@ -1,16 +1,13 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.25
+// @version      0.0.26
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=caseworkscloud.com
 // @grant        none
 // ==/UserScript==
-
-// table changes not working on https://fsestlouis.caseworkscloud.com/Document%20Processing%20Center/Forms/AllItems.aspx?RootFolder=/Document%20Processing%20Center/JonathanMcCormick#InplviewHash0061c5ff-a299-4225-b98b-9c54eab230d9=SortField%3DSysRecID-SortDir%3DAsc-
-// waitFor... does not seem to be triggering.
 
 console.time('CaseWonks load time')
 const iFramed = window.location !== window.parent.location; if (iFramed || (window.location.href.slice(-4) === ".txt") ) { return };
@@ -91,32 +88,69 @@ const caseWonksDataSet = {
 };
 
 const page = new Map([
-    ['AllItems.aspx', { alias: 'AllItems', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7' }],
-    ['DocBox.aspx', { alias: 'DocBox', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['AllDocsEFC90days.aspx', { alias: 'AllEFCNinetyDays', primaryTableLoc: 'td#scriptWPQ2 > table.ms-listviewtable:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
+    ['AllItems.aspx', { alias: 'AllItems', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
+    ['Appeals.aspx', { alias: 'Appeals', primaryTableLoc: 'table.ms-webpartPage-root', singleTable: 1, }],
+    ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
+    ['author.aspx', { alias: 'Author', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
+    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7 > table.ms-listviewtable' }],
+    ['DocBox.aspx', { alias: 'DocBox', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     ['DocumentDiscovery.aspx', { alias: 'DocDisc', primaryTableLoc: '.ms-webpart-zone.ms-fullWidth:has(table[summary])', }],
+    ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1 }],
+    ['FSEDocumentDiscoveryEFC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1 }],
+    // ['DocumentDiscoveryEFC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1 }],
     ['eSignDocuments.aspx', { alias: 'eSign', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
     ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
-    ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', singleTable: 1, }],
+    ['MyRecentEFCDocuments30days.aspx', { alias: 'RecentEFC', primaryTableLoc: 'td#scriptWPQ2 > table.ms-listviewtable:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
+    ['NCTRecycleBin.aspx', { alias: 'Trash', primaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ5 table.ms-listviewtable', singleTable: 1 }],
+    // ['NCTRecycleBin.aspx', { alias: 'Trash', primaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ5 table.ms-listviewtable', efcTableLoc: 'table.ms-webpartPage-root #WebPartWPQ8 table.ms-listviewtable' }],
+    ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
-    ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"]', singleTable: 1 }],
-    ['author.aspx', { alias: 'Author', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
-    ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
     ['Print2NCT.aspx', { alias: 'Print', }],
     ['Scan.aspx', { alias: 'Scan' }],
     ['Subscriptions.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
-    ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"]', singleTable: 1, }],
-    ['MyRecentEFCDocuments30days.aspx', { alias: 'RecentEFC', primaryTableLoc: 'td#scriptWPQ2 > table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
-    ['AllDocsEFC90days.aspx', { alias: 'AllEFCNinetyDays', primaryTableLoc: 'td#scriptWPQ2 > table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
-    ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fse' }],
-    ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'sse' }],
+    ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
     ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'cse' }],
+    ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fse' }],
     ['ViewByMNsureEdition.aspx', { alias: 'MSE', subdomain: 'mse' }],
+    ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'sse' }],
+    ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     // ['', { alias: '', }],
     // ['', { alias: '', }],
     // ['', { alias: '', }],
 ]).get(thisPageName) ?? { alias: 'general' };
+// const page = new Map([ // was trying something with ancestor / table loc. Don't think it'll work //
+//     ['AllDocsEFC90days.aspx', { alias: 'AllEFCNinetyDays', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
+//     ['AllItems.aspx', { alias: 'AllItems', primeAncestorLoc: 'td#scriptWPQ1', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+//     ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primeAncestorLoc: 'td#scriptWPQ1', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+//     ['author.aspx', { alias: 'Author', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table[summary="Document Processing Center"]', }],
+//     ['CaseFile.aspx', { alias: 'CaseFile', primeAncestorLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7' }],
+//     ['DocBox.aspx', { alias: 'DocBox', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+
+//     ['DocumentDiscovery.aspx', { alias: 'DocDisc', primeAncestorLoc: '.ms-webpart-zone.ms-fullWidth:has(table[summary])', }],
+//     ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primeAncestorLoc: 'table[summary="Document Processing Center"]', singleTable: 1 }],
+
+//     ['eSignDocuments.aspx', { alias: 'eSign', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+
+//     ['Home.aspx', { alias: 'Home', primeAncestorLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
+
+//     ['MyRecentEFCDocuments30days.aspx', { alias: 'RecentEFC', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
+//     ['PendingStatus.aspx', { alias: 'Pending', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+//     ['PersonalViews.aspx', { alias: 'Subs', primeAncestorLoc: 'div#WebPartWPQ1', primeTable: 'table.ms-listviewtable', singleTable: 1 }], // aka My Subs //
+//     ['Print2NCT.aspx', { alias: 'Print', }],
+//     ['Scan.aspx', { alias: 'Scan' }],
+//     ['Subscriptions.aspx', { alias: 'Subs', primeAncestorLoc: 'div#WebPartWPQ1', primeTable: 'table.ms-listviewtable', singleTable: 1 }],
+//     ['ViewbyDocSet.aspx', { alias: 'ViewbyDocSet', primeAncestorLoc: 'td#scriptWPQ2', primeTable: 'table[summary="Document Processing Center"]', }],
+//     ['ViewByChildSupportEdition.aspx', { alias: 'CSE', subdomain: 'cse' }],
+//     ['ViewByFinancialServicesEdition.aspx', { alias: 'FSE', subdomain: 'fse' }],
+//     ['ViewByMNsureEdition.aspx', { alias: 'MSE', subdomain: 'mse' }],
+//     ['ViewBySocialServicesEdition.aspx', { alias: 'SSE', subdomain: 'sse' }],
+//     ['WorkingDocuments.aspx', { alias: 'WorkingDocs', primeAncestorLoc: 'td#scriptWPQ1', primeTable: 'table[summary="Document Processing Center"]', singleTable: 1, }],
+//     // ['', { alias: '', }],
+//     // ['', { alias: '', }],
+//     // ['', { alias: '', }],
+// ]).get(thisPageName) ?? { alias: 'general' };
+
 mainBody.classList.add(page.alias, 'CaseWonks')
 const currPageEditionCode = window.location.host.split(".")[0]?.toLowerCase()
 page.alias.includes('Home') && localStorage.setItem( 'editionLocation', currPageEditionCode )
@@ -150,78 +184,97 @@ const docTypeSwaps = {
 
     // Releases //
     roiEmployment: ["Authorization for Release of Employment Information", "RoI Auth: Employment"],
-    roiShelter: ["Authorization for Release of Information About Residence and Shelter Expenses", "RoI Auth: Residence\/Shelter Expenses"],
+    roiGeneral: ["General (?:Consent\\/)?Authorization for Release of Information", "RoI Auth: General"],
     roiShare: ["Authorization to Share Information", "Auth to Share Info"],
-    roiGeneral: ["General Consent\\/Authorization for Release of Information", "RoI Auth: General"],
-    roiGeneral2: ["General Authorization for Release of Information", "RoI Auth: General"],
+    roiShelter: ["Authorization for Release of Information About Residence and Shelter Expenses", "RoI Auth: Residence\/Shelter Expenses"],
 
     // General //
-    pictureId: ["Drivers License \\(DL\\) - State ID", "State ID"],
+    appealsSummaryPacket : ["Appeals Summary and Supporting Docs Packet", "Packet: Appeals Summary, Supporting Docs"],
+    bsIdentity: ["1\\.1 BULK SCAN - Enumeration-Identity", "General Identity (BS)"],
+    brAuth: ["Authorization to Request Birth Records", "Auth to Request Birth Records"],
     eft: ["Electronic Funds Transfer", "EFT"],
+    ftiConsent : ["Consent to Access Federal Tax Information", "Consent to Access Fed Tax Info"],
     mergeMail: ["Merge For Mailing \\(Delete after Mailing or Printing\\)", "Merge for Mail - Delete"],
     miscCorr: ["Miscellaneous Correspondence \\(MC\\)", "Misc\. Correspondence"],
+    pictureId: ["Drivers License \\(DL\\) - State ID", "State ID"],
     privacyPrac: ["Notice of Priv Practices and Notice of Rights and Resp", "Notices: Privacy, Rights, Resp."],
     residenceOther: ["Other Residence", "Residence"],
     residence: ["Shelter\\/Residence Verification", "Residence"],
+    schoolAttend: ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
     socialSecurity: ["Social Security", "SS"],
     vetsAdmin: ["- Veterans Admin", ""],
-    schoolAttend: ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
 
     //// FSE ////
+
     // CCAP //
-    ccapAcrynym: ["(?:Minnesota )?Child Care Assistance( Program)?(?: \\(CCAP\\))?", "CCAP"],
-    ccapBsfAcrynym: ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
-    ccapRedet: ["Redetermination Form", "Redetermination"],
     ccap7054: ["MFIP\\/DWP Employment Services Child Care Request", "ES to CCAP 7054"],
+    ccapCafAddendum: ["- Child Care Addendum", "Addendum - CCAP"],
+    ccapCRF : ["Child Care Assistance Program - Change Report Form", "Change Report Form - CCAP"],
     ccapEduPlan: ["SLC CCAP Education Plan 9\\.24", "CCAP Education Plan"],
-    ccapMedForm: ["CCAP Medical Condition Documentation Form", "CCAP Medical Condition Doc Form"],
     ccapLnlAck: ["Parent Acknowledgement When Choosing a Legal Nonlicensed Provider", "LNL Acknowledgement"],
+    ccapMedForm: ["CCAP Medical Condition Documentation Form", "CCAP Medical Condition Doc Form"],
+    ccapRedet: ["Redetermination Form", "Redetermination"],
 
     // CS //
+    csEndGc: ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
     csGc: ["Cooperation with Child Support Enforcement", "CS Good Cause"],
     csReferral: ["Referral to Support and Collections", "CS Referral"],
-    csEndGc: ["Request to End Child Support Good Cause", "Request to End CS Good Cause"],
-
-    // Fraud //
-    fraudRef: ["Fraud Prevention Investigation Referral", "FPI Referral"],
-    fraudFound: ["SUMMARY OF INVESTIGATIVE FINDINGS", "Summary of Investigative Findings"],
-
-    // HC //
-    hcMHCP: ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
-    hcApp: ["HC Application for Certain Populations", "HC App for Certain Pops"],
-    hcRenew: ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
-    hcCEHI: ["Determination of Cost Effectiveness", "Determination of CEHI"],
-    hcFCA: ["Families with Children and Adults", "FCA"],
-    hcLiquidAssets: ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
-    hcMaFCA: ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
-    hcNewMember: ["New Household Member or Applicant Request Form", "HC: New HH Member/Applicant Request"],
-    hcFinInfoAuth: ["Obtain Financial Information from the Asset Verification Service", "Auth to Obtain Financial Info from AVS"],
-    hcLtcRenew: ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC"],
 
     // FNW //
-    fnwSudTreatVerif: ["General Assistance Verifying Participation in Substance Use Disorder Treatment", "GA Verifying Partic. in SUD Treatment"],
     fnwNonSSI: ["Interim Assistance Authorization \\(non-SSI\\)", "Non-SSI Interim Assist. Auth"],
     fnwSSI: ["SSI Interim Assistance Authorization", "SSI Interim Assist. Auth"],
+    fnwSudTreatVerif: ["General Assistance Verifying Participation in Substance Use Disorder Treatment", "GA Verifying Partic. in SUD Treatment"],
+
+    // Fraud //
+    fraudFound: ["SUMMARY OF INVESTIGATIVE FINDINGS", "Summary of Investigative Findings"],
+    fraudRef: ["Fraud Prevention Investigation Referral", "FPI Referral"],
 
     // LTC //
     ltcCommForm: ["Lead Agency Assessor/Case Manager/Worker LTC Communication Form", "LTC Communication Form"],
 
     // SNAP/Cash //
-    fsCaf: ["Combined Application Form \\(CAF\\)", "Combined Application"],
-    fsCafAddendum: ["Combined Application - Addendum \\(Cash and Supplemental Nutrition Assistance Program\\)", "CAF Addendum - SNAP/Cash"],
-    fsSnapAcrynym: ["(?:the )Supplemental Nutrition Assistance Program(?: \\(SNAP\\))?", "SNAP"],
-    fsMfipAcrynym: ["Minnesota Family Investment Program \\(MFIP\\)", "MFIP"],
-    fsLateRenew: ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six-Month Report", "Notice of late HRF, HCR, CSMR"],
     fsAssets: ["Signed Personal Statement about Assets for MFIP,DWP,GA,MSA, and GRH Programs", "Assets Statement form"],
-    fsEsReferral: ["Employment Services$", "ES Referral"],
+    fsCRF : ["Change Report Form for SNAP", "Change Report Form - SNAP"],
+    fsLateRenew: ["Notice of Late or Incomplete Household Report Form Health Care Renewal Form or Combined Six-Month Report", "Notice of late HRF/HCR/CSMR"],
     fsSchoolVer: ["School Attendance Verification", "School Attend Ver."],
+    mfipCRF : ["Change Report Form For Cash Programs", "Change Report Form - Cash"],
+    mfipEsReferral: ["Employment Services$", "ES Referral"],
+    mfipMedOpinion : ["Req for Medical Opinion- Family CASH", "Req for Medical Opinion - Cash"],
+    mfipSanctionIntent : ["MFIP INTENT TO SANCTION", "MFIP Intent to Sanction"],
 
-    // MSE //
+    // FSE Acrynyms //
+    bsfCcapAcrynym: ["Basic Sliding Fee( \\(BSF\\))?", "BSF"],
+    cafAcrynym: ["Combined Application(?: Form)?(?: \\(CAF\\))?(?: -)?", "CAF"],
+    ccapAcrynym: ["(?:Minnesota )?Child Care Assistance( Program)?(?: \\(CCAP\\))?", "CCAP"],
+    gaFnwAcrynym: ["General Assistance", "GA"],
+    mfipAcrynym: ["Minnesota Family Investment Program \\(MFIP\\)", "MFIP"],
+    snapAcrynym: ["(?:the )?Supplemental Nutrition Assistance Program(?: \\(SNAP\\))?", "SNAP"],
+    sudFnwAcrynym: ["Substance Use Disorder", "SUD"],
+
+
+    //// MSE ////
+
     mseAddNewborn: ["RG3F012 IM MNS R3 3907C Add a Newborn", "Add a Newborn"],
     mseAddMember: ["RG3F011 IM MNS R3 3907B Add a New Household Member", "Add a New HH Member"],
-    mseCertainPopElig: ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
     mseAuthRep: ["Giving Permission for Someone to Act on My Behalf", "Auth Rep (HC)"],
+    mseCertainPopElig: ["Request for Information to Determine Eligibility for Certain Populations", "Req for Info to Determine Elig for Certain Pops"],
     mseMhcpIfo: ["MHCP Information Needed for Reported Changes", "MHCP Info Needed"],
+
+    // HC //
+    hcApp: ["HC Application for Certain Populations", "HC App for Certain Pops"],
+    hcCEHI: ["Determination of Cost Effectiveness", "CEHI Determination"],
+    hcFinInfoAuth: ["Obtain Financial Information from the Asset Verification Service", "Auth to Obtain Financial Info from AVS"],
+    hcLiquidAssets: ["Liquid Assets\\(Bank, Credit Union, Stocks, Bonds, etc\\)", "Liquid Assets (Bank, stocks, etc.)"],
+    hcLtcRenew: ["Renewal for People Receiving Long-Term Care Services", "Renewal for People Receiving LTC"],
+    hcMcoMembAddr : ["MCO Member Address Change Report Form", "MCO Member Address Change"],
+    hcNewMember: ["New Household Member or Applicant Request Form", "HC: New HH Member/Applicant Request"],
+    hcRenewal: ["Combined Annual Renewal For Certain Populations", "Combined Renewal for Certain Pops"],
+
+    // MSE Acrynyms //
+    fcaAcrynym: ["Families with Children and Adults", "FCA"],
+    maFcaAcrynym: ["Medical Assistance for Families with Children and Adults \\(MA-FCA\\)", "MA-FCA"],
+    mhcpAcrynym: ["(?:MHCP \\()?Minnesota Health Care Programs(?:\\))?", "MHCP"],
+
     // groupName: ["", ""],
 };
 const docTypeRegExp = new RegExp( Object.entries(docTypeSwaps).map(([group, [regExPattern,]=[]] = []) => "(?<"+group+">"+regExPattern+")").join("|"), "g" )
@@ -258,9 +311,10 @@ const shortNoteSwaps = { // Assume the space after an email address is not a whi
     oldDHSform: [" - DHS ?[0-9]{4}\\w?$", ""],
     recdVia: ["\\.Received via", ". Rec'd: "],
     sentVia: ["\\.Sent via", ". Sent: "],
-    movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1: $2, $3. "],
+    mergedDeleted: ["This document was merged with another document and the user selected Delete Original Document\\.", "Doc merged; original deleted. "],
+    movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", (match, movedCopied, source, date) => movedCopied + ": " + source + " " + dateFuncs.formatDate(date, "mdyy") + ". "],
+    // movedCopied: ["(Moved|Copied) from ([A-Z]{3})(?: [A-Za-z. ]+) " + patterns.byEmailSpace + "on (" + patterns.date + ") " + patterns.time + "\\.", "$1: $2, $3. "],
     sentPubPort: ["Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (?<date>" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal in: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
-    // sentPubPort: ["(?<period>\\.)?Document uploaded via Public Portal on " + patterns.date + " " + patterns.time + " " + patterns.byEmailSpace + "and retrieved by Portal Integration on (?<date>" + patterns.date + ") " + patterns.time + "\\.", (...result) => { result.reverse(); return (result[0].period && ". ") + "Rec'd: Portal " + dateFuncs.formatDate(result[0].date, "mdyy") + ". " }],
     checkedIn: ["Document was checked-in by System at (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Checked-in " + dateFuncs.formatDate(dateMatch, "mdyy") + ". "],
     recdPubPort: ["Public Portal - " + patterns.emailSpace + "was sent this on (" + patterns.date + ") " + patterns.time + "\\.", (fullStr, dateMatch) => "Portal out: " + dateFuncs.formatDate(dateMatch, "mdyy") + ". " ],
     sysAcctRecd: ["A[0-9]{9,10}_([A-Z]+)[0-9_]+(?:[A-Za-z]+_)?(?:doc\\dof\\d)?\\.(\\w{3,4}) by System Account on (" + patterns.date + ") " + patterns.time + "\\.", "$1 $2 rec'd: $3. "],
@@ -322,7 +376,6 @@ const taxonomySwaps = new Map([
 ]);
 
 const shortNoteRegExp = new RegExp( Object.entries(shortNoteSwaps).map(([group, [regExPattern,]=[]] = []) => "(?<"+group+">"+regExPattern+")").join("|"), "g" )
-const tableLocQuery = (loc) => mainBody.querySelector(page[loc]);
 const modifiedTables = [];
 
 const gbl = {
@@ -652,54 +705,50 @@ async function Subs() {
         [createNewEle('div', { style: "display: flex; gap: 5px;" }), [ compareOpenButton, compareResetButton ],
         ]) );
     hideButtonContainer.append( hideMatchedButton, hideUnmatchedButton );
-    mainBody.append(
-        ...arrangeElements(
-            [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
-             compareDialog,
-             [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
-              compareTextarea,
-              createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center; margin-top: 15px;" }),
-              [compareOkButton,
-               compareCancelButton
-              ],
-             ],
-             compareContainer,
-             [colorCoding,
-              [createNewEle('div', { style: "margin-left: 5px; font-weight: 550;" }),
-               [createNewEle('div', { classList: 'compareMatch', textContent: 'Case # Found' }),
-                createNewEle('div', { classList: 'duplicateMatch', textContent: 'Duplicate Entry' }),
-                createNewEle('div', { classList: 'newEntry', textContent: 'Newer Entry' }),
-                createNewEle('div', { textContent: 'Not matched' })
-               ],
-              ],
-              dupeCaseContainer,
-              [dupeCaseList,
-              ],
-              uniqueCases,
-              matchedCount,
-              compareMissingContainer,
-              [compareMissingList,
-              ],
-             ],
-            ])
-    );
+    !function addElesToDocBody() {
+        mainBody.append(
+            ...arrangeElements(
+                [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
+                 compareDialog,
+                 [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
+                  compareTextarea,
+                  createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center; margin-top: 15px;" }),
+                  [compareOkButton,
+                   compareCancelButton
+                  ],
+                 ],
+                 compareContainer,
+                 [colorCoding,
+                  [createNewEle('div', { style: "margin-left: 5px; font-weight: 550;" }),
+                   [createNewEle('div', { classList: 'compareMatch', textContent: 'Case # Found' }),
+                    createNewEle('div', { classList: 'duplicateMatch', textContent: 'Duplicate Entry' }),
+                    createNewEle('div', { classList: 'newEntry', textContent: 'Newer Entry' }),
+                    createNewEle('div', { textContent: 'Not matched' })
+                   ],
+                  ],
+                  dupeCaseContainer,
+                  [dupeCaseList,
+                  ],
+                  uniqueCases,
+                  matchedCount,
+                  compareMissingContainer,
+                  [compareMissingList,
+                  ],
+                 ],
+                ])
+        );
+    }();
     let today = Date.now()
-    const tableAncestorLocator = async () => await waitForTableCells(mainBody.querySelector('#scriptWPQ1'))
-    let tableAncestor = await tableAncestorLocator()
+    let tableAncestor = await tableLocator('#scriptWPQ1', mainBody)
     const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]').textContent.toUpperCase()
-    const tableLocator = async () => waitForTableCells(tableAncestor.querySelector('#spgridcontainer_WPQ1_leftpane_mainTable > tbody') ?? tableAncestor.querySelector('table[summary] > tbody'))
-    let existingTable = await tableLocator()
+    let existingTableQuery = ['#spgridcontainer_WPQ1_leftpane_mainTable > tbody', 'table[summary] > tbody', ]
+    let existingTable = await tableLocator(existingTableQuery, tableAncestor)
     const rowMap = new Map()
-    monitorForTableDestruction(existingTable)
-    function monitorForTableDestruction() {
-        const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
-            if (existingTable.isConnected) { return };
-            existingTable = await tableLocator()
-            modifyDocumentTables(existingTable)
-            if (!rowMap.size) { return };
-            checkForDuplicateSubs(true)
-        });
-        waitForOldTableToBeDestroyed.observe(tableAncestor, { childList: true, subtree: true });
+    monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor, ifTableDestroyed)
+    function ifTableDestroyed(newTable) {
+        if (!rowMap.size) { return };
+        checkForDuplicateSubs(true)
+        existingTable = newTable
     };
     function setVarsBasedOnEditMode(editMode, tr) {
         switch(editMode) {
@@ -846,6 +895,8 @@ async function mainTableVariables(tr) {
                 case "eSign": [ checkbox,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum, taxonomy,,, modifiedDate, modifiedBy ] = tr.children; break;
                 case "AllDpcDocs": [ checkbox,,,, title, name, uselessMenu, firstName, lastName,, shortNote, docBoxCaseNum ] = tr.children; break;
                 case "DocDisc": [ checkbox,, title, name,, firstName, lastName, docBox, shortNote, docBoxCaseNum,,, birthDate, taxonomy, createdDate, receivedDate ] = tr.children; break;
+                case "Appeals": [ checkbox,, title, name,, firstName, lastName, shortNote, docBoxCaseNum,, createdDate ] = tr.children; break;
+                case "Trash": [ checkbox,, title, name,, firstName, lastName, shortNote, docBoxCaseNum, createdDate, modifiedDate, modifiedBy ] = tr.children; break;
                 case "RecentEFC":
                 case "AllEFCNinetyDays": [ checkbox,, title, name,, firstName, lastName, shortNote, docBoxCaseNum, taxonomy, createdDate, receivedDate, createdBy, modifiedDate, modifiedBy ] = tr.children; break;
                 case "Subs":
@@ -896,13 +947,13 @@ async function efcTableVariables(tr) {
     return { checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId };
 };
 async function modifyDocumentTables(tableBody) {
-    let sortedByCaseNum = tableBody?.closest('table')?.querySelector('.ms-headerSortTitleLink:has(+span:not([style="display: none;"]))')?.textContent === "MAXIS" ?? false
     gbl.refVars.currentTbody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
+    let sortedByCaseNum = gbl.refVars.currentTbody?.closest('table')?.querySelector('.ms-headerSortTitleLink:has(+span:not([style="display: none;"]))')?.textContent === "MAXIS" ?? false
     const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return }; // because some table headers are in the table body //
-            mainTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
+            mainTableVariables(tr).then( ({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
                 if (["DocDisc"].includes(page.alias)) { addClassToNotificationRows(name, tr); addClassToDeletedRows(docBox, tr) };
                 if (sortedByCaseNum) { lastCaseNum = groupByCaseNumIfSorted(gbl.refVars.currentTbody, lastCaseNum, docBoxCaseNum, tr) };
                 doModifications({ checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId })
@@ -911,6 +962,9 @@ async function modifyDocumentTables(tableBody) {
     });
     modifyTableHeaders(gbl.refVars.currentTbody)
     modifiedTables.push(gbl.refVars.currentTbody)
+    if (page.alias !== "Subs") { // subs has their own call //
+        monitorForTableDestruction(tableBody, 'tbody', gbl.refVars.primaryTableLoc).catch(err => { console.log("monitor error"); console.log(err) })
+    };
 };
 async function modifyDocumentTablesEFC(tableBody) {
     gbl.refVars.currentTbody = await waitForTableCells(tableBody)
@@ -950,15 +1004,17 @@ function groupByCaseNumIfSorted(tableBody, lastCaseNum, docBoxCaseNum, tr) {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////////// MODIFICATIONS START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
 function doModifications({ checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId, }={}) {
     modifyReviewed(reviewed)
     modifyTitles(title, shortNote)
     modifyShortNote(shortNote)
     modifyName(name)
     switch(editionCode) {
-        case "fse": modifyCaseNum(docBoxCaseNum, docBox, checkbox); break;
-        case "mse": modifyCaseNum(intCase, docBox, checkbox); break;
-    }
+        case "fse": { modifyCaseNum(docBoxCaseNum, docBox, checkbox); break; }
+        case "mse": { modifyCaseNum(intCase, docBox, checkbox); break; }
+        default: break;
+    };
     modifyTaxonomy(taxonomy)
     let dateModifications = [createdDate, modifiedDate, receivedDate, birthDate].forEach(modifyDate);
     let nameModifications = [createdBy, modifiedBy].forEach(modifyCreatedModifiedBy)
@@ -972,13 +1028,13 @@ function modifyTitles(title, shortNote) {
     let originalTdText = title.textContent
     let newTdText = title.textContent
     function modifyBadTitle() {
-        if (!shortNote.textContent.length) { return 0 };
-        if (title.textContent?.includes('BULK SCAN') && shortNote.textContent?.includes(' ')) {
+        if (!shortNote?.textContent?.length) { return 0 };
+        if (title.textContent?.includes('BULK SCAN') && shortNote.textContent?.includes('IM ')) {
             let bulkNoteTitle = shortNote.textContent.replace(/ (-|incl) DHH?S ?[0-9]{4}[A-Z]?/, "")
             replaceChildrenSpan(title, { title: originalTdText, textContent: bulkNoteTitle })
             replaceChildrenSpan(shortNote, { title: shortNote.textContent, textContent: "bulk" })
             return 1
-        } else if (title.textContent?.includes('MNB001 Application')) {
+        } else if (title.textContent?.includes('MNB00') && title.textContent?.includes('Application')) {
             let { appType, remainingShortNote } = determineAppType(shortNote.textContent)
             replaceChildrenSpan(title, { title: originalTdText, textContent: appType })
             replaceChildrenSpan(shortNote, { title: shortNote.textContent, textContent: remainingShortNote })
@@ -986,7 +1042,7 @@ function modifyTitles(title, shortNote) {
         };
     };
     if (modifyBadTitle()) { return };
-    let matches = [...newTdText.matchAll(docTypeRegExp)].map(match => [ match[0], Object.entries(match.groups).filter(([key, val] = []) => val)?.[0]?.[0] ])
+    let matches = [...newTdText.matchAll(docTypeRegExp)].map(match => [ match[0], Object.entries(match.groups).filter(([key, val] = []) => val)?.[0]?.[0] ]);
     matches.forEach(([ patternMatch, group ] = []) => {
         let [ regExPattern, regExReplacement ] = docTypeSwaps[group]
         let regEx = docTypeSwaps[group][2]; if (!regEx) { regEx = new RegExp(regExPattern); docTypeSwaps[group].push(regEx) };
@@ -994,9 +1050,10 @@ function modifyTitles(title, shortNote) {
     });
     replaceChildrenSpan(title, { title: originalTdText, textContent: newTdText })
     function determineAppType(shortNoteText) {
-        if (shortNoteText.includes("CCAP")) { return { appType: "CCAP Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
-        else if (shortNoteText.includes("CAF")) { return { appType: "Combined Application (MNB001)", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
-        else { return { appType: "Unknown App Type (MNB001)", remainingShortNote: shortNoteText } };
+        let mnbNumbIdx = title.textContent.indexOf('MNB00'), mnbNumb = title.textContent.slice(mnbNumbIdx, mnbNumbIdx+6);
+        if (shortNoteText.includes("CCAP")) { return { appType: "CCAP Application (" + mnbNumb + ")", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else if (shortNoteText.includes("CAF")) { return { appType: "Combined Application (" + mnbNumb + ")", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else { return { appType: "Unknown App Type (" + mnbNumb + ")", remainingShortNote: shortNoteText } };
     };
 };
 function modifyShortNote(shortNote) {
@@ -1028,17 +1085,20 @@ function modifyCaseNum(tdCaseNum, tdDocBox, tdCheckbox) {
         return;
     };
     if (!tdCaseNum.textContent) { return };
-    let highlightClassName = tdCaseNum.textContent?.length > 8 ? tdCaseNum.textContent : tdCaseNum.textContent?.trim()?.split(/^0/)?.reverse()[0] || "" // if not CSE case number, trims leading 0s //
-    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassName, style: "cursor: pointer;" })
+    let highlightClassName = tdCaseNum.textContent.trim() ?? ""
+    if (!highlightClassName) { return };
+    let invalidNumber = edition.caseNumFormat.test(highlightClassName) ? "" : " color: red !important;"
+    if (invalidNumber) { verbose(tdCaseNum) };
+    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassName, style: "cursor: pointer;" + invalidNumber })
+    newLinkTd.append(newLinkA, copySymbol())
     tdCaseNum.replaceWith(newLinkTd)
-    highlightClassName && newLinkTd.append(newLinkA, copySymbol())
     newLinkA?.addEventListener('click', () => { openCaseFile(newLinkA.textContent, "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
         openCaseFile(newLinkA.textContent, "_blank")
     });
     let tdTableRow = newLinkTd.closest('tr')
-    highlightClassName && tdTableRow.classList.add(highlightClassName)
+    tdTableRow?.classList.add(highlightClassName)
     highlightEvent({ highlightClassName, tdTableRow, tdCheckbox })
 };
 function modifyTaxonomy(taxonomy) {
@@ -1056,18 +1116,29 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
     createdModifiedBy.title = createdModifiedBy.textContent
     createdModifiedBy.textContent = createdModifiedBy.textContent.split(/[@ ]/)[0]
 };
-// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ MODIFICATIONS END /////////////////////////////////////////////////////////////////////////////////////////////////
-// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
-!function modifyTablesAsLoaded() {
+!async function modifyTablesAsLoaded() {
     if (!page.hasOwnProperty('primaryTableLoc')) { return };
+    // gbl.refVars.primaryTableLoc ??= await tableLocator(page.primaryTableLoc, mainBody)
     gbl.refVars.primaryTableLoc ??= tableLocQuery('primaryTableLoc')
     if (!gbl.refVars.primaryTableLoc) { return };
     gbl.refVars.primaryTableLoc.classList.add('dpcTableLoc')
     gbl.refVars.primaryTableLoc.addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
     tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
-    const observer = new MutationObserver(mutations => { tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
-    observer.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
+    const watchForTablesBeingLoaded = new MutationObserver(() => {
+        tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
+    watchForTablesBeingLoaded.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
+
+    if (["CaseFile", "Subs"].includes(page.alias)) { return};
+    const watchForPrimaryTableLocExistence = new MutationObserver(async () => {
+        if (gbl.refVars.primaryTableLoc.isConnected) { return };
+        watchForTablesBeingLoaded.disconnect()
+        // gbl.refVars.primaryTableLoc = await tableLocator(page.primaryTableLoc, mainBody)
+        gbl.refVars.primaryTableLoc = tableLocQuery('primaryTableLoc')
+        tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
+        watchForTablesBeingLoaded.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
+    });
+    watchForPrimaryTableLocExistence.observe(mainBody, { childList: true, subtree: true });
 }();
 !function modifyTablesAsLoadedEFC() {
     if (!page.hasOwnProperty('efcTableLoc')) { return };
@@ -1075,9 +1146,13 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
     gbl.refVars.efcTableLoc.classList.add('efcTableLoc')
     if (!gbl.refVars.efcTableLoc) { return };
     tbodLoadedElesEFC(gbl.refVars.efcTableLoc)?.forEach(tbod => { modifyDocumentTablesEFC(tbod) });
-    const observer = new MutationObserver(mutations => { tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) }) });
-    observer.observe(gbl.refVars.efcTableLoc, { childList: true, subtree: true });
+    const watchForTablesBeingLoaded = new MutationObserver(() => { tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) }) });
+    watchForTablesBeingLoaded.observe(gbl.refVars.efcTableLoc, { childList: true, subtree: true });
 }();
+
+// \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ MODIFICATIONS END /////////////////////////////////////////////////////////////////////////////////////////////////
+// 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
+
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -1095,32 +1170,51 @@ function navToCaseFileNTF() {
     gbl.eles.newTabField.value = ""
     return caseFileNumber
 };
-
-function visualIndicatorIfPdfSelected() {
-    let selectedLength = document.querySelectorAll('tr.s4-itm-selected:has(td.ms-vb-icon > img[alt="pdf File"])').length
-    switch(selectedLength) {
-        case 0: ribbon.classList.remove('pdfSelected'); break;
-        default: ribbon.classList.add('pdfSelected'); break;
-    };
+function triggerEventOnValueAssigned(ele) { // triggers on: input (user, program), select (program) // works in MEC2, does not work in CW. The CW change is probably set to not bubble/stopProp //
+    ele = sanitize.query(ele)
+    if (!ele) { return };
+    const { get, set } = Object.getOwnPropertyDescriptor(ele.constructor.prototype, 'value');
+    Object.defineProperty(ele, 'value', {
+        get() { return get.call(this) },
+        set(newValue) {
+            set.call(this, newValue); // Set the actual value using the native setter //
+            this.dispatchEvent(new CustomEvent('valueassigned', { detail: newValue }));
+        },
+        configurable: true,
+        enumerable: true,
+    });
+    return ele;
 };
+
+// element locators //
 function tbodLoadedEles() {
-    let tbodArray = page.singleTable
+    return page.singleTable
         ? [ gbl.refVars.primaryTableLoc.querySelector('tbody') ] // single table: first table body found in primaryTableLoc, no #id //
         : page.alias === "DocDisc" // DocDisc doesn't use 'isloaded' //
-            ? Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody:has(>tr.ms-itmhover)'))
+            ? Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody:has(>tr.ms-itmhover)')) // DocDisc //
             : Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true") // multiple tables: all tbody elements with #id that starts with tbod //
-    return tbodArray;
+    // return tbodArray;
 };
 function tbodLoadedElesEFC() {
     return Array.from(gbl.refVars.efcTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
 };
+async function tableLocator(tableQueryStr, tableAncestor = document) {
+    let foundQuery = [tableQueryStr].flat().reduce((found, query) => found ?? tableAncestor.querySelector(query) ?? found, null); // for single tables that have multiple locations, which need to be prioritized //
+    // let foundQuery = [tableQuery].flat().reduce((found, query) => { return found ?? tableAncestor.querySelector(query) ?? found }, null); // for single tables that have multiple locations, which need to be prioritized //
+    return !foundQuery ? undefined : await waitForTableCells(foundQuery)
+};
+function tableLocQuery(loc) { return mainBody.querySelector(page[loc]) };
 
-
-
-function createNewEle(nodeName, attribObj={}, dataObj={}) {
-    let newEle = Object.assign(document.createElement(nodeName), attribObj);
-    Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
-    return newEle;
+// element creators / manipulators //
+function addCSSStyleSheet(rules) {
+    const newStyleSheet = new CSSStyleSheet();
+    rules && newStyleSheet.replaceSync(rules)
+    document.adoptedStyleSheets.push(newStyleSheet)
+    return newStyleSheet;
+};
+function addStyling(ele, styleObj) {
+    if (!ele) { return };
+    Object.entries(styleObj).forEach(([property, value] = []) => { ele.style[property] = value });
 };
 function arrangeElements(elementArray) {
 	const validArray = arrToCheck => Array.isArray(arrToCheck) && arrToCheck.length > 0
@@ -1132,6 +1226,11 @@ function arrangeElements(elementArray) {
 			validArray(item) ? subLevels(item, newParent) : newParent.appendChild(item)
 		});
 	};
+};
+function createNewEle(nodeName, attribObj={}, dataObj={}) {
+    let newEle = Object.assign(document.createElement(nodeName), attribObj);
+    Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
+    return newEle;
 };
 function createSlider({ textContent="", title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
     let toggleSlider = createNewEle('div', { classList: ["toggle-slider", extraClasses].join(' '), style: extraStyles })
@@ -1152,7 +1251,29 @@ function createSlider({ textContent="", title, id, checked, fontSize, classes: e
 function replaceChildrenSpan(td, spanProperties) {
     td.replaceChildren( createNewEle('span', spanProperties) )
 };
+function toggleSliderVisibility(isChecked, styleName, styleSheet) {
+    switch(isChecked) {
+        case true: styleSheet.replaceSync("." + styleName + " { display: none; }"); break;
+        case false: styleSheet.replaceSync("." + styleName + " {}"); break;
+    };
+};
+function toggleVisible(element, trueFalse) {
+    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
+    element.forEach( ele => { ele = sanitize.query(ele); ele.style.visibility = trueFalse ? 'visible' : 'hidden' } );
+};
+function unhideElement(element, trueFalse) { // true to remove hidden, false to add hidden;
+    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
+    element.forEach( ele => { ele = sanitize.query(ele); trueFalse ? ele.classList.remove('hidden') : ele.classList.add('hidden') } );
+};
 
+// Output: text / visual indicators //
+function visualIndicatorIfPdfSelected() {
+    let selectedLength = document.querySelectorAll('tr.s4-itm-selected:has(td.ms-vb-icon > img[alt="pdf File"])').length
+    switch(selectedLength) {
+        case 0: ribbon.classList.remove('pdfSelected'); break;
+        default: ribbon.classList.add('pdfSelected'); break;
+    };
+};
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
 function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
 function snackBar(sbText, title="Copied!", doCopy=true) {
@@ -1170,8 +1291,22 @@ function snackBar(sbText, title="Copied!", doCopy=true) {
     mainBody.appendChild(snackBarDivs.container)
     doCopy && copy(snackBarDivs.textarea.textContent)
 };
+
+// Mutation Observers //
+async function monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor = document, ifTableDestroyedFn) {
+    const waitForOldTableToBeDestroyed = new MutationObserver(async () => {
+        if (existingTable.isConnected) { return };
+        existingTable = tableLocator(existingTableQuery, tableAncestor).then(replacementTable => {
+            modifyDocumentTables(replacementTable)
+            if (ifTableDestroyedFn) { ifTableDestroyedFn(replacementTable) };
+            return replacementTable;
+        });
+    });
+    waitForOldTableToBeDestroyed.observe(tableAncestor, { childList: true, subtree: true });
+};
 async function waitForTableCells(awaitedTable) {
     return new Promise((resolve, reject) => {
+        if (!awaitedTable) { reject("table does not exist") };
         if ( awaitedTable?.querySelector('tbody tr > td:nth-child(2)') ) { resolve( awaitedTable ) }
         else {
             const observer = new MutationObserver(() => {
@@ -1201,18 +1336,10 @@ async function waitForEleWithAncestor(awaitedEleStr, anchorEle=document.body) {
         };
     });
 };
-function addCSSStyleSheet(rules) {
-    const newStyleSheet = new CSSStyleSheet();
-    rules && newStyleSheet.replaceSync(rules)
-    document.adoptedStyleSheets.push(newStyleSheet)
-    return newStyleSheet;
-};
-function addStyling(ele, styleObj) {
-    if (!ele) { return };
-    Object.entries(styleObj).forEach(([property, value] = []) => { ele.style[property] = value });
-};
+
+// row count / highlighting //
 async function countDocs() { // For those pages where no total doc count exists, adds the count to the link located directly above the table //
-    let docTableArea = tableLocQuery('primaryTableLoc'), docTable = await waitForEleWithAncestor('table[summary="Document Processing Center"] > tbody', docTableArea),
+    let docTableArea = tableLocQuery('primaryTableLoc'), docTable = await waitForEleWithAncestor('table[summary="Document Processing Center"].ms-listviewtable > tbody', docTableArea),
         currentPageLink = mainBody.querySelector('a.ms-pivotControl-surfacedOpt-selected')
     if (!currentPageLink) { return };
     currentPageLink.textContent = currentPageLink?.textContent + " (" + (docTable.querySelectorAll('tr').length ?? '') + ")"
@@ -1241,35 +1368,6 @@ function highlightEvent({ highlightClassName, tdTableRow, tdCheckbox } = {}) {
 async function highlightClickCount(rowCount) {
     gbl.eles.clickedCount.textContent = rowCount;
     if (!gbl.eles.clickedCountCont.isConnected) { waitForEleWithAncestor('#NCTCaseWorksGroup > .ms-cui-groupContainer > .ms-cui-groupTitle', ribbon).then(ribbonEle => ribbonEle.append( gbl.eles.clickedCountCont )) };
-};
-function toggleSliderVisibility(isChecked, styleName, styleSheet) {
-    switch(isChecked) {
-        case true: styleSheet.replaceSync("." + styleName + " { display: none; }"); break;
-        case false: styleSheet.replaceSync("." + styleName + " {}"); break;
-    };
-};
-function toggleVisible(element, trueFalse) {
-    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
-    element.forEach( ele => { ele = sanitize.query(ele); ele.style.visibility = trueFalse ? 'visible' : 'hidden' } );
-};
-function unhideElement(element, trueFalse) { // true to remove hidden, false to add hidden;
-    element = Array.isArray(element) ? element : element instanceof NodeList ? [...element] : [element]
-    element.forEach( ele => { ele = sanitize.query(ele); trueFalse ? ele.classList.remove('hidden') : ele.classList.add('hidden') } );
-};
-function triggerEventOnValueAssigned(ele) { // triggers on: input (user, program), select (program) // works in MEC2, does not work in CW. The CW change is probably set to not bubble/stopProp //
-    ele = sanitize.query(ele)
-    if (!ele) { return };
-    const { get, set } = Object.getOwnPropertyDescriptor(ele.constructor.prototype, 'value');
-    Object.defineProperty(ele, 'value', {
-        get() { return get.call(this) },
-        set(newValue) {
-            set.call(this, newValue); // Set the actual value using the native setter //
-            this.dispatchEvent(new CustomEvent('valueassigned', { detail: newValue }));
-        },
-        configurable: true,
-        enumerable: true,
-    });
-    return ele;
 };
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ FUNCTION_LIBRARY SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
