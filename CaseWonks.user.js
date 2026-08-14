@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.28
+// @version      0.0.29
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -573,7 +573,7 @@ function openLinkFormatter(pageName, openLinkCaseNum) {
     }(); //======================== Case_History | New_Tab_Case_Number_Field Section_End ===================================//
 }();
 const editPropertiesWindow = {
-    editPropEles: { editPropTLO: undefined, iframeContainer: undefined, docTypeInput: undefined, editPropDoc: undefined, docTypeDropDown: undefined, },
+    editPropEles: { editPropTLO: undefined, editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, editDocBox: undefined, editMaxis: undefined, },
     watchForWindow() {
         let editPropEles = this.editPropEles
         this.editPropEles.editPropTLO = Array.from(mainBody.children).find(ele => ele.className.includes("ms-dlgContent"))
@@ -588,13 +588,23 @@ const editPropertiesWindow = {
     watchWindow() {
         let editPropEles = this.editPropEles
         const editPropObserver = new MutationObserver(() => {
-            this.editPropEles.docTypeInput = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer').querySelector('iframe').contentDocument.querySelector('[title="DocType Required Field"]')
-            if (!editPropEles.docTypeInput) { return };
-            this.editPropEles.iframeContainer = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer'); this.editPropEles.editPropDoc = editPropEles.docTypeInput.getRootNode(); this.editPropEles.docTypeDropDown = editPropEles.editPropDoc.querySelector('#ui-id-2')
-            if (this.checkIfSubscription(editPropEles.editPropDoc)) { editPropObserver.disconnect(); return };
+            this.editPropEles.editMaxis = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer').querySelector('iframe').contentDocument.querySelector('[title="MAXIS"]')
+            if (!editPropEles.editMaxis) { return };
+            this.editPropEles.editRootNode = editPropEles.editMaxis.getRootNode();
+            this.editPropEles.editIframe = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer');
+            this.editPropEles.editDropDown = editPropEles.editRootNode.querySelector('#ui-id-2');
+            this.editPropEles.editDocType = editPropEles.editRootNode.querySelector('[title="DocType Required Field"]');
+            this.editPropEles.editDocBox = editPropEles.editRootNode.querySelector('[title="DocBox"]')
+            if (this.checkIfSubscription()) { editPropObserver.disconnect(); return };
             this.checkDocType()
-            const docTypeDropDownObserver = new MutationObserver(() => { this.checkDocType() });
-            docTypeDropDownObserver.observe(editPropEles.docTypeDropDown, { attributes: true, attributeFilter: ['style'] });
+            if (caseWonksDataSet.data.userName && editPropEles.editDocBox) {
+                editPropEles.editDocBox.closest('tr').append( createNewEle('style', { textContent: "@scope { br { display: none; } select, button { display: inline-block; } }" }) )
+                let epDocBoxButton = createNewEle('button', { type: "button", classList: "wonks wonks-button", textContent: "➔ " + caseWonksDataSet.data.userName, })
+                editPropEles.editDocBox?.closest('td').append(epDocBoxButton)
+                epDocBoxButton.addEventListener('click', () => { editPropEles.editDocBox.value = caseWonksDataSet.data.userName })
+            };
+            const editDropDownObserver = new MutationObserver(() => { this.checkDocType() });
+            editDropDownObserver.observe(editPropEles.editDropDown, { attributes: true, attributeFilter: ['style'] });
             this.watchForWindowRemoval()
             editPropObserver.disconnect()
         });
@@ -602,57 +612,69 @@ const editPropertiesWindow = {
     },
     watchForWindowRemoval() {
         let editPropEles = this.editPropEles
+        verbose("watching for window removals")
         const removalObserver = new MutationObserver(() => {
-            if (editPropEles.editPropDoc?.parentElement) { return };
+            if (editPropEles.editRootNode?.parentElement) { return };
             if (!editPropEles.editPropTLO || !editPropEles.editPropTLO.isConnected) {
                 verbose("editPropEles.editPropTLO removed");
-                editPropEles = { editPropTLO: undefined, iframeContainer: undefined, docTypeInput: undefined, editPropDoc: undefined, docTypeDropDown: undefined, }
+                editPropEles = { editPropTLO: undefined, editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
                 this.watchForWindow()
             } else {
-                verbose("editPropEles.editPropDoc removed");
-                editPropEles = { iframeContainer: undefined, docTypeInput: undefined, editPropDoc: undefined, docTypeDropDown: undefined, }
+                verbose("editPropEles.editRootNode removed");
+                editPropEles = { editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
                 this.watchWindow()
             };
             removalObserver.disconnect()
         });
         removalObserver.observe(mainBody, { childList: true, });
-        removalObserver.observe(editPropEles.iframeContainer, { childList: true, });
+        removalObserver.observe(editPropEles.editIframe, { childList: true, });
     },
     checkDocType() {
         let editPropEles = this.editPropEles
-        if (!editPropEles.docTypeInput) { return };
-        if (editPropEles.docTypeInput.value.includes("MNB0")) { editPropEles.docTypeInput.setAttribute('style', "color: red !important;") }
-        else { editPropEles.docTypeInput.removeAttribute('style');
+        if (!editPropEles.editDocType) { return };
+        if (editPropEles.editDocType.value.includes("MNB0")) { editPropEles.editDocType.setAttribute('style', "color: red !important;") }
+        else { editPropEles.editDocType.removeAttribute('style');
         };
-        if (["DHS3550"].includes(editPropEles.docTypeInput.value.split(" ")[0])) { this.addSubButton(editPropEles.editPropDoc) }
-        else { editPropEles.editPropDoc.querySelector('#subButton')?.remove() };
+        if (["DHS3550"].includes(editPropEles.editDocType.value.split(" ")[0])) { this.addSubButton(editPropEles.editRootNode) }
+        else { editPropEles.editRootNode.querySelector('#subButton')?.remove() };
     },
-    addSubButton(editPropDoc) {
-        let vpEles = {
-            vpDocBox: editPropDoc.querySelector('[title="DocBox"]'), vpFirstName: editPropDoc.querySelector('[title="First Name"]'), vpLastName: editPropDoc.querySelector('[title="Last Name"]'), vpMaxis: editPropDoc.querySelector('[title="MAXIS"]'),
-            vpPriority: editPropDoc.querySelector('[title="P"]'), vpShortNote: editPropDoc.querySelector('[title="Short Note/Next Step"]'), vpDocSet: editPropDoc.querySelector('[title="DocSet"]'),
+    addSubButton(editRootNode) {
+        let epEles = {
+            epDocBox: editRootNode.querySelector('[title="DocBox"]'), epFirstName: editRootNode.querySelector('[title="First Name"]'), epLastName: editRootNode.querySelector('[title="Last Name"]'), epMaxis: editRootNode.querySelector('[title="MAXIS"]'),
+            epPriority: editRootNode.querySelector('[title="P"]'), epShortNote: editRootNode.querySelector('[title="Short Note/Next Step"]'), epDocSet: editRootNode.querySelector('[title="DocSet"]'),
         };
-        let vpAddSubButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks" });
+        let epAddSubButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks" });
         !function appendAddSubButton() {
-            let vpDocSetTd = vpEles.vpDocSet.closest('td'); Object.assign(vpDocSetTd, { style: "width: unset; display: flex; justify-content: space-between;" });
-            vpDocSetTd.append(vpAddSubButton)
-            vpAddSubButton.addEventListener('click', () => {
-                vpEles.vpPriority.checked = true
-                vpEles.vpShortNote.value = "sub'd"
-                vpEles.vpDocBox?.focus()
-                let vpSubFilter = vpEles.vpDocBox.closest('tr').style.display === "none" ? "SortField%3DCreated-SortDir%3DDesc" : "FilterField1%3DDocBox-FilterValue1%3D" + vpEles.vpDocBox.value
-                navigator.clipboard.writeText(vpEles.vpMaxis.value)
-                window.open("/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=" + vpSubFilter, "_blank")
-                // window.open("https://fsestlouis.caseworkscloud.com/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=" + vpSubFilter, "_blank")
+            let epDocSetTd = epEles.epDocSet.closest('td'); Object.assign(epDocSetTd, { style: "width: unset; display: flex; justify-content: space-between;" });
+            epDocSetTd.append(epAddSubButton)
+            epAddSubButton.addEventListener('click', () => {
+                epEles.epPriority.checked = true
+                epEles.epShortNote.value = "sub'd"
+                localStorage.setItem('CaseWonks.sub', JSON.stringify({ maxis: epEles.epMaxis.value, name: epEles.epFirstName.value + " " + epEles.epLastName.value, docBox: epEles.epDocBox.value }));
+                verbose(JSON.stringify({ maxis: epEles.epMaxis.value, name: epEles.epFirstName.value + " " + epEles.epLastName.value, docBox: epEles.epDocBox.value }))
+                let epSubParam = epEles.epDocBox.closest('tr').style.display === "none" ? "SortField%3DCreated-SortDir%3DDesc" : "FilterField1%3DDocBox-FilterValue1%3D" + epEles.epDocBox.value
+                window.open("/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=" + epSubParam, "_blank")
                 return
             });
         }();
     },
-    checkIfSubscription(editPropDoc) {
-        if (editPropDoc.querySelector('#dialogTitleSpan')?.textContent.includes("Subscription")) {
-            editPropDoc.querySelector('[title="Title Required Field"]').focus()
+    checkIfSubscription() {
+        let editPropEles = this.editPropEles
+        if (editPropEles.editPropTLO.querySelector('#dialogTitleSpan')?.textContent.includes("Subscription")) {
+            if (gbl.refVars.wonksSubLS) {
+                let addSubContainer = createNewEle('td', { classList: "wonks" }), addSubEnterDataButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks-button" });
+                addSubContainer.append(addSubEnterDataButton)
+                editPropEles.editRootNode.querySelector('.ms-toolbar input[id*=toolBarTbl_]').closest('td').insertAdjacentElement('beforebegin', addSubContainer)
+                addSubEnterDataButton.addEventListener('click', () => {
+                    editPropEles.editRootNode.querySelector('[title="MAXIS"]').value = gbl.refVars.wonksSubLS.maxis
+                    editPropEles.editRootNode.querySelector('[title="DocBox"]').value = gbl.refVars.wonksSubLS.docBox
+                    editPropEles.editRootNode.querySelector('[title="Title Required Field"]').value = gbl.refVars.wonksSubLS.name
+                    localStorage.removeItem('CaseWonks.sub')
+                });
+            } else { editPropEles.editRootNode.querySelector('[title="Title Required Field"]').focus() };
             return 1;
         };
+        return 0;
     },
 };
 editPropertiesWindow.watchForWindow();
@@ -829,6 +851,16 @@ async function Subs() {
     let editMode = editLinkText()
     let existingTableQuery = ['#spgridcontainer_WPQ1_leftpane_mainTable > tbody', 'table[summary] > tbody', ]
     let existingTable = await tableLocator(existingTableQuery, tableAncestor)
+    gbl.eles.wonksSubLS = sanitize.json(localStorage.getItem('CaseWonks.sub'))
+    if (gbl.eles.wonksSubLS) {
+        Array.from(existingTable.querySelectorAll('tbody tr'), ele => { ele.classList.add(ele.children[4].textContent) });
+        let alreadySubbed = document.getElementsByClassName(gbl.eles.wonksSubLS.maxis)?.[0]
+        if (alreadySubbed) {
+            alreadySubbed?.scrollIntoView({ block: "center" })
+            alreadySubbed.style.backgroundColor = "yellow"
+            localStorage.removeItem('CaseWonks.sub')
+        };
+    };
     const rowMap = new Map()
     monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor, ifTableDestroyed)
     function ifTableDestroyed(newTable) {
