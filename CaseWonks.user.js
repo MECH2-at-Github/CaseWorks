@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.29
+// @version      0.0.30
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -86,6 +86,7 @@ const caseWonksDataSet = {
         localStorage.setItem( 'caseWonks.' + dataOrSettings, JSON.stringify(this[dataOrSettings]) )
     },
 };
+
 verbose(caseWonksDataSet.data)
 verbose(caseWonksDataSet.settings)
 
@@ -129,10 +130,10 @@ const editionLocation = ( page.hasOwnProperty('subdomain') ? page.subdomain : [ 
 const editionCode = editionLocation.slice(0, 3), countyCode = editionLocation.slice(3);
 
 const edition = new Map([
-    ['fse', { SOR: "MAXIS", caseNumFormat: new RegExp("^\\d{1,8}$"), notFound: "PRIV", docDiscSearch: "MAXIS" }],
-    ['mse', { SOR: "MNSure", caseNumFormat: new RegExp("^\\d{8}$"), notFound: "Not Found", docDiscSearch: "InCase" }],
-    ['cse', { SOR: "PRISM", caseNumFormat: new RegExp("^\\d{10} ?\\d{2}$"), notFound: "PRIV", }],
-    ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV", }]
+    ['fse', { SOR: "MAXIS", caseNumFormat: new RegExp("^\\d{1,8}$"), notFound: "PRIV/No Data", docDiscSearch: "MAXIS" }],
+    ['mse', { SOR: "MNSure", caseNumFormat: new RegExp("^\\d{8}$"), notFound: "Not Found/No Data", docDiscSearch: "InCase" }],
+    ['cse', { SOR: "PRISM", caseNumFormat: new RegExp("^\\d{10} ?\\d{2}$"), notFound: "PRIV/No Data", }],
+    ['sse', { SOR: "SSIS", caseNumFormat: new RegExp("\\d+"), notFound: "PRIV/No Data", }]
 ]).get(editionCode)
 
 const docTypeSwaps = {
@@ -169,8 +170,8 @@ const docTypeSwaps = {
     miscCorr: ["Miscellaneous Correspondence \\(MC\\)", "Misc\. Correspondence"],
     pictureId: ["Drivers License \\(DL\\) - State ID", "State ID"],
     privacyPrac: ["Notice of Priv Practices and Notice of Rights and Resp", "Notices: Privacy, Rights, Resp."],
-    residenceOther: ["Other Residence", "Residence"],
-    residence: ["Shelter\\/Residence Verification", "Residence"],
+    residenceOther: ["Other Residence", "Residence/Shelter"],
+    residence: ["Shelter\\/Residence Verification", "Residence/Shelter"],
     schoolAttend: ["Request for Verification of School Attendance/Progress", "Req for Verif of School Attendance"],
     socialSecurity: ["Social Security", "SS"],
     vetsAdmin: ["- Veterans Admin", ""],
@@ -364,49 +365,21 @@ const gbl = {
         currentTbody: undefined, primaryTableLoc: undefined, efcTableLoc: undefined,
         highlight: { selectedClass: "" },
         lastCaseNum: "",
+        wonksSubLS: sanitize.json(localStorage.getItem('CaseWonks.sub')),
     },
 };
 gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
 
-const caseData = (() => { // used for case history and fixing page title // fse, mse correct //
-    if (page.alias !== "CaseFile") { return };
-    let caseIdNameEle = document.querySelector('h1:not(#pageTitle)')
-    let splitCaseData = (() => {
-        if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
-        if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: edition.notFound } }
-        switch(editionCode) {
-            case "fse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups;
-            case "mse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseName>[A-Z'\-, ]+) \((?<caseNum>[0-9]{8})\)/i).groups;
-            case "cse": return { caseNum: undefined, caseName: undefined };
-            case "sse": return { caseNum: undefined, caseName: undefined };
-            default: return { caseNum: undefined, caseName: undefined };
-        };
-    })();
-    if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
-    if (["fse", "mse", ].includes(editionCode)) {
-        splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10)
-        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;' }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum, title: "Left click to copy #. Right click to open on Doc Disc." })
-        splitCaseData.caseName !== edition.notFound
-            ? caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
-        : caseIdNameEleReplacement.append( createNewEle('div', { textContent: "Client Detail Not Found In Repository For Case " }), caseNumEle )
-        caseIdNameEle.replaceWith( caseIdNameEleReplacement );
-
-        caseNumEle.addEventListener('click', clickEvent => snackBar(clickEvent.target.textContent) );
-        caseNumEle.addEventListener('contextmenu', () => { window.open("/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } );
-        // caseNumEle.addEventListener('contextmenu', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } );
-    };
-    return splitCaseData;
-})();
 !function addScriptSpecificCSSRules() {
-    const wonksNavContainerCSSRules = Object.values({
+    const wonksNavContainerCSSRules = "@scope (#wonksNavContainer) { :scope { " + Object.values({
         navContainer: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 990;",
         homePageLink: "#homePageLink { font-size: 14px; color: light-dark(#106EBE, #82caff) !important; font-weight: 600; text-decoration: none; cursor: pointer; }",
         newTabFieldDiv: "#newTabFieldDiv { display: inline-block; & button { margin-left: 10px; min-width: unset; font-size: 10px } }",
         // wonksCFButton: "#wonksCFButton { margin-left: 10px; min-width: unset; font-size: 10px }",
         divs: "div { margin-top: 1px; }",
         buttons: "button { height: 25px; padding: 0 10px }",
-    }).join(' ');
-    const wonksNavContainerCSS = addCSSStyleSheet("@scope (#wonksNavContainer) { :scope { " + wonksNavContainerCSSRules + " } }")
+    }).join(' ') + " } }";
+    const wonksNavContainerCSS = addCSSStyleSheet(wonksNavContainerCSSRules)
     const wonksScriptWideCSSRules = Object.values({
         clickedCountCont: "#clickedCountCont { position: absolute; right: 15%; bottom: 0; font-size: 10pt; color: light-dark(#222, #efefef) !important; }",
         snackBar: "@scope (#snackBarDiv) { :scope { opacity: 0; animation: show 2500ms 100ms cubic-bezier(0.38, 0.97, 0.56, 0.76) forwards; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none; }"
@@ -427,19 +400,46 @@ const caseData = (() => { // used for case history and fixing page title // fse,
     //     ["CaseFile", 'table[summary="Document Processing Center"] {} table[summary="FSE Electronic File Cabinet"] {}']
     // ]).get(page.alias);
 }();
-function openLinkFormatter(pageName, openLinkCaseNum) {
-    return new Map([
-        ["CaseFile", "/CWRF/Case%20File.aspx?SystemRecordID=CASENUM&SOR=" + edition.SOR + "#DPC"],
-        ["DocumentDiscovery", "/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=CASENUM"]
-    ]).get(pageName)?.replace("CASENUM", openLinkCaseNum)
-};
+
+const caseFileCaseData = (() => { // used for case history and fixing page title // fse, mse correct //
+    if (page.alias !== "CaseFile") { return };
+    let caseIdNameEle = document.querySelector('h1:not(#pageTitle)')
+    let splitCaseData = (() => {
+        if (!caseIdNameEle) { return { caseNum: undefined, caseName: undefined } };
+        if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: edition.notFound } }
+        switch(editionCode) {
+            case "fse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups;
+            case "mse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseName>[A-Z'\-, ]+) \((?<caseNum>[0-9]{8})\)/i).groups;
+            case "cse": return { caseNum: undefined, caseName: undefined };
+            case "sse": return { caseNum: undefined, caseName: undefined };
+            default: return { caseNum: undefined, caseName: undefined };
+        };
+    })();
+    if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
+    if (["fse", "mse", ].includes(editionCode)) {
+        splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10)
+        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;', title: "Left click to copy #. Right click to open on Doc Disc." }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
+        splitCaseData.caseName !== edition.notFound
+            ? caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
+        : caseIdNameEleReplacement.append( createNewEle('div', { textContent: "Client Detail Not Found In Repository For Case " }), caseNumEle )
+        caseIdNameEle.replaceWith( caseIdNameEleReplacement );
+
+        caseIdNameEleReplacement.addEventListener('click', clickEvent => { snackBar(splitCaseData.caseNum, "Copied!", true) });
+        caseIdNameEleReplacement.addEventListener('contextmenu', () => { window.open(openLinkFormatter("DocumentDiscovery", splitCaseData.caseNum), "_blank") } ); // TODO: window.open(openLinkFormatter(DocumentDiscovery, splitCaseData.caseNum), "_blank")
+        // caseIdNameEleReplacement.addEventListener('contextmenu', () => { window.open("/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } ); // TODO: window.open(openLinkFormatter(DocumentDiscovery, splitCaseData.caseNum), "_blank")
+        // caseNumEle.addEventListener('contextmenu', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } );
+    };
+    return splitCaseData;
+})();
 !function addCustomNavBar() {
     if (!ribbon) { return };
     mainBody.insertAdjacentElement( 'afterbegin', gbl.eles.navContainer )
     !function mainPageLink() {
         gbl.eles.navContainer.append( gbl.eles.homePageLink )
-        gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_self") });
-        gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_blank"); });
+        gbl.eles.homePageLink.addEventListener('click', () => { window.open(openLinkFormatter("Home"), "_self") });
+        // gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_self") });
+        gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open(openLinkFormatter("Home"), "_blank"); });
+        // gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_blank"); });
     }();
     !function addVersion() { mainBody.querySelector('#RibbonContainer-TabRowRight').append( gbl.eles.caseWonksVersion ) }();
     // Link to "All Docs" in Nav Bar? (would need to store the username from the Home Page)
@@ -485,10 +485,10 @@ function openLinkFormatter(pageName, openLinkCaseNum) {
                 const caseHistory = sanitize.json(localStorage.getItem('MECH2.caseHistoryLS')) ?? []
                 if (page.alias === "CaseFile") { addToCaseHistoryArray() }
                 function addToCaseHistoryArray() {
-                    if (!caseData.caseNum) { return };
-                    const caseIdValTest = (entry) => entry.caseIdValNumber === caseData.caseNum, foundDuplicate = caseHistory.findIndex(caseIdValTest)
+                    if (!caseFileCaseData.caseNum) { return };
+                    const caseIdValTest = (entry) => entry.caseIdValNumber === caseFileCaseData.caseNum, foundDuplicate = caseHistory.findIndex(caseIdValTest)
                     if (foundDuplicate > -1) { caseHistory.splice(foundDuplicate, 1) }
-                    let timestamp = dateFuncs.formatDate(new Date(), "mmddhm"), newEntry = { caseIdValNumber: caseData.caseNum, caseName: caseData.caseName, time: timestamp };
+                    let timestamp = dateFuncs.formatDate(new Date(), "mmddhm"), newEntry = { caseIdValNumber: caseFileCaseData.caseNum, caseName: caseFileCaseData.caseName, time: timestamp };
                     while (caseHistory.length > 9) { caseHistory.pop() }
                     caseHistory.unshift(newEntry)
                     localStorage.setItem('MECH2.caseHistoryLS', JSON.stringify(caseHistory));
@@ -632,7 +632,7 @@ const editPropertiesWindow = {
     checkDocType() {
         let editPropEles = this.editPropEles
         if (!editPropEles.editDocType) { return };
-        if (editPropEles.editDocType.value.includes("MNB0")) { editPropEles.editDocType.setAttribute('style', "color: red !important;") }
+        if (["BULK", "MNB0"].includes(editPropEles.editDocType.value.slice(0, 4))) { editPropEles.editDocType.setAttribute('style', "color: red !important;") }
         else { editPropEles.editDocType.removeAttribute('style');
         };
         if (["DHS3550"].includes(editPropEles.editDocType.value.split(" ")[0])) { this.addSubButton(editPropEles.editRootNode) }
@@ -651,8 +651,7 @@ const editPropertiesWindow = {
                 epEles.epPriority.checked = true
                 epEles.epShortNote.value = "sub'd"
                 localStorage.setItem('CaseWonks.sub', JSON.stringify({ maxis: epEles.epMaxis.value, name: epEles.epFirstName.value + " " + epEles.epLastName.value, docBox: epEles.epDocBox.value }));
-                verbose(JSON.stringify({ maxis: epEles.epMaxis.value, name: epEles.epFirstName.value + " " + epEles.epLastName.value, docBox: epEles.epDocBox.value }))
-                let epSubParam = epEles.epDocBox.closest('tr').style.display === "none" ? "SortField%3DCreated-SortDir%3DDesc" : "FilterField1%3DDocBox-FilterValue1%3D" + epEles.epDocBox.value
+                let epSubParam = epEles.epDocBox.closest('tr').style.display === "none" ? "SortField%3DCreated-SortDir%3DDesc" : "FilterField1%3DDocBox-FilterValue1%3D" + epEles.epDocBox.value // can't use openLinkFormatter without adding another param to the function //
                 window.open("/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=" + epSubParam, "_blank")
                 return
             });
@@ -702,9 +701,9 @@ function AllItems() {
     //slider to hide pending?
 };
 function CaseFile() {
-    if (!caseData.caseNum) { return };
+    if (!caseFileCaseData.caseNum) { return }; // also see caseFileCaseData for page changes relating to the title
     !function fixPageTitle() {
-        document.querySelector('title').textContent = caseData.caseName + " - " + caseData.caseNum
+        document.querySelector('title').textContent = caseFileCaseData.caseName + " - " + caseFileCaseData.caseNum
     }();
     Array.from(document.querySelectorAll('td:has(>a[href="javascript:"])'), td => {
         let tdTextChild = td.childNodes[1], tdTaxText = tdTextChild.textContent.replace(":", "").trim(), taxSwapMatch = taxonomySwaps.get(tdTaxText)
@@ -719,7 +718,6 @@ function DocBox() {
 function DocDisc() {
     mainBody.querySelector('.GoTd')?.removeAttribute('rowspan')
     addCSSStyleSheet(".DDTable { & td:not(:has(input, a)) { text-align: right; } & td:has(select) { padding: 0 !important; } td.GoTd { position: unset; margin: 0; } } h2 { display: flex; gap: 40px; align-items: center; padding: 0 3px !important; & > a { border: none !important; } }")
-    // document.head.append( createNewEle('style', { textContent: ".DDTable { & td:not(:has(input, a)) { text-align: right; } & td:has(select) { padding: 0 !important; } td.GoTd { position: unset; margin: 0; } } h2 { display: flex; gap: 40px; align-items: center; padding: 0 3px !important; & > a { border: none !important; } }" }) )
 
     const dpcH2 = document.querySelector('h2.ms-webpart-titleText:has(>a[href="/Document%20Processing%20Center"])')
     const fromCaseFile = document.referrer.includes("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Case%20File.aspx") ? "checked" : ""
@@ -851,10 +849,9 @@ async function Subs() {
     let editMode = editLinkText()
     let existingTableQuery = ['#spgridcontainer_WPQ1_leftpane_mainTable > tbody', 'table[summary] > tbody', ]
     let existingTable = await tableLocator(existingTableQuery, tableAncestor)
-    gbl.eles.wonksSubLS = sanitize.json(localStorage.getItem('CaseWonks.sub'))
-    if (gbl.eles.wonksSubLS) {
+    if (gbl.refVars.wonksSubLS) {
         Array.from(existingTable.querySelectorAll('tbody tr'), ele => { ele.classList.add(ele.children[4].textContent) });
-        let alreadySubbed = document.getElementsByClassName(gbl.eles.wonksSubLS.maxis)?.[0]
+        let alreadySubbed = document.getElementsByClassName(gbl.refVars.wonksSubLS.maxis)?.[0]
         if (alreadySubbed) {
             alreadySubbed?.scrollIntoView({ block: "center" })
             alreadySubbed.style.backgroundColor = "yellow"
@@ -1003,7 +1000,7 @@ function foldableCodeStorageArea() {
 // })();
 
 };
-const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); snackBar(clickEvent.target.previousElementSibling?.textContent, "Copied", true); clickEvent.target.style.filter = 'invert(1)'; setTimeout(() => { clickEvent.target.style.filter = "unset"; }, 2000); }, })
+const copySymbol = () => createNewEle('span', { textContent: ' ❐', style: 'padding-left: 2px; cursor: pointer;', onclick: function(clickEvent) { clickEvent.preventDefault(); snackBar(clickEvent.target.previousElementSibling?.textContent, "Copied!", true); clickEvent.target.style.filter = 'invert(1)'; setTimeout(() => { clickEvent.target.style.filter = "unset"; }, 2000); }, })
 async function mainTableVariables(tr) {
     let checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId
     switch(editionCode) {
@@ -1204,25 +1201,25 @@ function modifyCaseNum(tdCaseNum, tdDocBox, tdCheckbox) {
     if (!tdCaseNum) { return };
     if (!tdCaseNum.textContent) { highlightRemove() };
     if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # // removes spaces as it's by docbox, which can have spaces //
-        highlightEvent({ highlightClassName: tdDocBox.textContent.replace(" ", ""), tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
+        highlightEvent({ highlightClassNum: tdDocBox.textContent.replace(" ", ""), tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
         return;
     };
     if (!tdCaseNum.textContent) { return };
-    let highlightClassName = tdCaseNum.textContent.trim() ?? ""
-    if (!highlightClassName) { return };
-    let invalidNumber = edition.caseNumFormat.test(highlightClassName) ? "" : " color: red !important;"
-    if (invalidNumber) { verbose(tdCaseNum) };
-    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassName, style: "cursor: pointer;" + invalidNumber })
+    let highlightClassNum = tdCaseNum.textContent.trim() ?? ""
+    if (!highlightClassNum) { return };
+    let validCaseNum = testCaseNumValidity(highlightClassNum)
+    if (!validCaseNum) { verbWarn("modifyCaseNum: !validCaseNum", tdCaseNum) };
+    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassNum, style: "cursor: pointer;" + (validCaseNum ? "" : " color: red !important;") })
     newLinkTd.append(newLinkA, copySymbol())
     tdCaseNum.replaceWith(newLinkTd)
-    newLinkA?.addEventListener('click', () => { openCaseFile(newLinkA.textContent, "_self") });
+    newLinkA?.addEventListener('click', () => { window.open(openLinkFormatter("CaseFile", validCaseNum), "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
-        openCaseFile(newLinkA.textContent, "_blank")
+        window.open(openLinkFormatter("CaseFile", validCaseNum), "_blank")
     });
     let tdTableRow = newLinkTd.closest('tr')
-    tdTableRow?.classList.add(highlightClassName)
-    highlightEvent({ highlightClassName, tdTableRow, tdCheckbox })
+    tdTableRow?.classList.add(highlightClassNum)
+    highlightEvent({ highlightClassNum, tdTableRow, tdCheckbox })
 };
 function modifyTaxonomy(taxonomy) {
     if (!taxonomy || !taxonomy.textContent) { return };
@@ -1279,12 +1276,13 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
 
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // ///////////////////////////////////////////////////////////////////////////// FUNCTION_LIBRARY SECTION START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-function openCaseFile(openCaseFileNum, target) {
-    openCaseFileNum = testCaseNumValidity(openCaseFileNum)
-    if (!openCaseFileNum) { return undefined };
-    copy(openCaseFileNum)
-    window.open("/CWRF/Case%20File.aspx?SystemRecordID=" + openCaseFileNum + "&SOR=" + edition.SOR, target)
-    return openCaseFileNum
+function openLinkFormatter(pageName, openLinkCaseNum) { // change "casenum" to something more generic?
+    return new Map([
+        ["CaseFile", "/CWRF/Case%20File.aspx?SystemRecordID=CASENUM&SOR=" + edition.SOR + "#DPC"],
+        ["DocumentDiscovery", "/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=CASENUM"],
+        ["Home", "https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Home.aspx"],
+        // ["Subs", "/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=CASENUM" + openLinkCaseNum],
+    ]).get(pageName)?.replace("CASENUM", openLinkCaseNum)
 };
 function testCaseNumValidity(caseNumber) { caseNumber = caseNumber?.replace(/\s/g, ''); return (edition.caseNumFormat)?.test(caseNumber) ? caseNumber : undefined }; // MAXIS/MEC2: 1-7 digits. METS: 8 digits. PRISM: 10 + 2 digits.
 function triggerEventOnValueAssigned(ele) { // triggers on: input (user, program), select (program) // works in MEC2, does not work in CW. The CW change is probably set to not bubble/stopProp //
@@ -1389,18 +1387,20 @@ function visualIndicatorIfPdfSelected() {
     };
 };
 function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
+function verbWarn() { console.warn( ...arguments, "  (VerbWarn line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
 function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
 function snackBar(sbText, title="Copied!", doCopy=true) {
+    if (!sbText) { return };
     document.getElementById('snackBarDiv')?.remove()
     let style = ""
     let snackBarDivs = {
-        container: createNewEle('div', { id: "snackBarDiv wonks" }),
+        container: createNewEle('div', { id: "snackBarDiv", classList: "wonks" }),
         title: createNewEle('span', { textContent: title }),
         textarea: createNewEle('div'),
     };
     title !== "notitle" && snackBarDivs.container.appendChild( snackBarDivs.title )
     snackBarDivs.container.append( snackBarDivs.textarea )
-    snackBarDivs.textarea.append( ...sbText.split('\n').map( textLine => createNewEle('span', { textContent: textLine }) ) )
+    snackBarDivs.textarea.append( ...(sbText?.toString().split('\n').map( textLine => createNewEle('span', { textContent: textLine }) )) )
     mainBody.appendChild(snackBarDivs.container)
     doCopy && copy(snackBarDivs.textarea.textContent)
 };
@@ -1457,25 +1457,25 @@ async function countDocs() { // For those pages where no total doc count exists,
     if (!currentPageLink) { return };
     currentPageLink.textContent = currentPageLink?.textContent + " (" + (docTable.querySelectorAll('tr').length ?? '') + ")"
 };
-function highlightAdd(highlightClassName, currentTbody) {
-    const trMatched = currentTbody?.getElementsByClassName(highlightClassName)
+function highlightAdd(highlightClassNum, currentTbody) {
+    const trMatched = currentTbody?.getElementsByClassName(highlightClassNum)
     highlightClickCount(trMatched.length)
     Array.from(trMatched, tr => { tr.classList.add('selectedDocs')} );
 };
 function highlightRemove() {
     Array.from(mainBody.querySelectorAll('tr.selectedDocs'), tr => { tr.classList.remove('selectedDocs') });
 };
-function highlightEvent({ highlightClassName, tdTableRow, tdCheckbox } = {}) {
-    highlightClassName && tdTableRow.classList.add(highlightClassName)
+function highlightEvent({ highlightClassNum, tdTableRow, tdCheckbox } = {}) {
+    highlightClassNum && tdTableRow.classList.add(highlightClassNum)
     tdTableRow.addEventListener('click', highlightOnClickEvent);
     tdCheckbox?.addEventListener('click', highlightOnClickEvent);
     let currentTbody = gbl.refVars.currentTbody
     function highlightOnClickEvent(clickEvent) {
-        if (highlightClassName === gbl.refVars.highlight.selectedClass && !tdTableRow.className?.includes('s4-itm-selected') && tdTableRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
-        gbl.refVars.highlight.selectedClass = highlightClassName // sets global variable //
+        if (highlightClassNum === gbl.refVars.highlight.selectedClass && !tdTableRow.className?.includes('s4-itm-selected') && tdTableRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
+        gbl.refVars.highlight.selectedClass = highlightClassNum // sets global variable //
         highlightRemove()
         if (tdTableRow.className?.includes('s4-itm-selected')) { return highlightClickCount(''); };
-        highlightAdd(highlightClassName, currentTbody)
+        highlightAdd(highlightClassNum, currentTbody)
     };
 };
 async function highlightClickCount(rowCount) {
