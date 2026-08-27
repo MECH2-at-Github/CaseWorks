@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.30
+// @version      0.0.31
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -76,7 +76,8 @@ const dateFuncs = {
         }
     },
 };
-const doClick = (element) => { element = sanitize.query(element); element?.dispatchEvent(new MouseEvent('click', { bubbles: true })) };
+const doClick = (element, options={bubbles:true}) => { element = sanitize.query(element); element?.dispatchEvent(new MouseEvent('click', options)) };
+// const doClick = (element, bubbles=true) => { element = sanitize.query(element); element?.dispatchEvent(new MouseEvent('click', { bubbles })) };
 
 const caseWonksDataSet = {
     data: { ...sanitize.json( localStorage.getItem('caseWonks.data') ) } ?? {}, // set by info found on pages //
@@ -96,7 +97,7 @@ const page = new Map([
     ['Appeals.aspx', { alias: 'Appeals', primaryTableLoc: 'table.ms-webpartPage-root', singleTable: 1, }],
     ['AllDPCDocuments.aspx', { alias: 'AllDpcDocs', primaryTableLoc: 'td#scriptWPQ1 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     ['author.aspx', { alias: 'Author', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"]', }],
-    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', efcTableLoc: '#scriptWPQ7 > table.ms-listviewtable' }],
+    ['CaseFile.aspx', { alias: 'CaseFile', primaryTableLoc: '#DPC table table.ms-listviewtable', secondaryTableLoc: '#scriptWPQ7 > table.ms-listviewtable' }],
     ['DocBox.aspx', { alias: 'DocBox', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     ['DocumentDiscovery.aspx', { alias: 'DocDisc', primaryTableLoc: '.ms-webpart-zone.ms-fullWidth:has(table[summary])', }],
     ['DocumentDiscoveryDPC.aspx', { alias: 'DocDiscDPC', primaryTableLoc: 'table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1 }],
@@ -106,7 +107,7 @@ const page = new Map([
     ['Home.aspx', { alias: 'Home', primaryTableLoc: 'div.ms-webpart-zone.ms-fullWidth:has(#divAPNMain)' }],
     ['MyRecentEFCDocuments30days.aspx', { alias: 'RecentEFC', primaryTableLoc: 'td#scriptWPQ2 > table.ms-listviewtable:is([summary="MNsure EFC"], [summary="FSE Electronic File Cabinet"])', singleTable: 1 }],
     ['NCTRecycleBin.aspx', { alias: 'Trash', primaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ5 table.ms-listviewtable', singleTable: 1 }],
-    // ['NCTRecycleBin.aspx', { alias: 'Trash', primaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ5 table.ms-listviewtable', efcTableLoc: 'table.ms-webpartPage-root #WebPartWPQ8 table.ms-listviewtable' }],
+    // ['NCTRecycleBin.aspx', { alias: 'Trash', primaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ5 table.ms-listviewtable', secondaryTableLoc: 'table.ms-webpartPage-root #WebPartWPQ8 table.ms-listviewtable' }],
     ['PendingStatus.aspx', { alias: 'Pending', primaryTableLoc: 'td#scriptWPQ2 > table[summary="Document Processing Center"].ms-listviewtable', singleTable: 1, }],
     ['PersonalViews.aspx', { alias: 'Subs', primaryTableLoc: 'div#WebPartWPQ1', singleTable: 1 }],
     ['Print2NCT.aspx', { alias: 'Print', }],
@@ -252,7 +253,7 @@ const docTypeSwaps = {
 const docTypeRegExp = new RegExp( Object.entries(docTypeSwaps).map(([group, [regExPattern,]=[]] = []) => "(?<"+group+">"+regExPattern+")").join("|"), "g" )
 
 const theadSwaps = new Map([
-    ["Title", "Document Type"],
+    ["Title", "DocType"],
     ["Reviewed", "Rev"],
     ["First Name", "First"],
     ["Last Name", "Last"],
@@ -337,7 +338,7 @@ const taxonomySwaps = new Map([
     [ "5.3 CCAP - Application", "5.3\xA0CCAP\xA0Apps" ],
     [ "5.4 CCAP - Authorized Activity", "5.4\xA0CCAP\xA0Act." ],
     [ "5.5 CCAP - Child Support", "5.5 CCAP\xA0CS" ],
-    [ "5.6 CCAP - Child Provider", "5.6 CCAP Child\xA0Provider" ],
+    [ "5.6 CCAP - Child Provider", "5.6 CCAP\xA0Provider" ],
     [ "6.0 KA - Kinship Assistance", "6.0 Kinship\xA0Assist." ],
     [ "6.1 KA - Citizenship-Identity", "6.0 Kinship\xA0Identity" ],
     [ "6.2 KA - Application", "6.2 Kinship\xA0Apps" ],
@@ -362,7 +363,7 @@ const gbl = {
         clickedCount: createNewEle('span', { id: "clickedCount", classList: "wonks" }), clickedCountCont: createNewEle('span', { id: "clickedCountCont" } ), docCountText: createNewEle('span', { textContent: "Doc Count: " }),
     },
     refVars: {
-        currentTbody: undefined, primaryTableLoc: undefined, efcTableLoc: undefined,
+        currentTbody: undefined, primaryTableLoc: undefined, secondaryTableLoc: undefined,
         highlight: { selectedClass: "" },
         lastCaseNum: "",
         wonksSubLS: sanitize.json(localStorage.getItem('CaseWonks.sub')),
@@ -374,31 +375,55 @@ gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
     const wonksNavContainerCSSRules = "@scope (#wonksNavContainer) { :scope { " + Object.values({
         navContainer: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 990;",
         homePageLink: "#homePageLink { font-size: 14px; color: light-dark(#106EBE, #82caff) !important; font-weight: 600; text-decoration: none; cursor: pointer; }",
-        newTabFieldDiv: "#newTabFieldDiv { display: inline-block; & button { margin-left: 10px; min-width: unset; font-size: 10px } }",
-        // wonksCFButton: "#wonksCFButton { margin-left: 10px; min-width: unset; font-size: 10px }",
+        newTabFieldDiv: "#newTabFieldDiv { display: inline-block }",
         divs: "div { margin-top: 1px; }",
-        buttons: "button { height: 25px; padding: 0 10px }",
+        buttons: "button { height: 25px; padding: 0 10px; margin-left: 10px; min-width: unset; font-size: 10px; }",
+        inputButtonBorder: "input, button { border: 1px solid light-dark(#222, #a1a1a1) }",
     }).join(' ') + " } }";
     const wonksNavContainerCSS = addCSSStyleSheet(wonksNavContainerCSSRules)
     const wonksScriptWideCSSRules = Object.values({
+        darkReaderOverrides: ":root { --darkreader-background-add8e624: #add8e624; --darkreader-border-808080cc: #808080cc; }",
         clickedCountCont: "#clickedCountCont { position: absolute; right: 15%; bottom: 0; font-size: 10pt; color: light-dark(#222, #efefef) !important; }",
         snackBar: "@scope (#snackBarDiv) { :scope { opacity: 0; animation: show 2500ms 100ms cubic-bezier(0.38, 0.97, 0.56, 0.76) forwards; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none; }"
         + " &.snackBar-hide { visibility: hidden; transition: visibility 0s 3s; } &.snackBar-show { display: block; } & > span { position: relative; display: block; margin-bottom: 5px; text-align: left; &.snackBar-title { text-align: center; } }"
         + " @keyframes show { 0%, 100% { opacity: 0; transform: none; } 15%, 85% { opacity: 1; transform: none; } } }",
+        selectedDocs: ":is(.selectedCaseNumDocs, .selectedDocs):not(.s4-itm-selected) { background-color: light-dark(#add8e63d, var(--darkreader-background-add8e624)) !important; }",
+        tdBorderTop: ".tdBorderTop { & > td { border-top: 1px solid var(--darkreader-border-808080cc) !important; } }",
+        pdfSelected: '.pdfSelected #Ribbon\\.Documents\\.NCT\\.Document\\.Delete-Large > span { position: relative; color: rgba(255, 0, 0); & span:has(img)::after { z-index: 5; content: ""; position: absolute; background-color: rgba(255, 0, 0, 0.35); pointer-events: none; width: 100%; height: 100%; } }',
+        hidden: ".hidden { display: none !important; }",
     }).join(' ');
     const wonksScriptWideCSS = addCSSStyleSheet(wonksScriptWideCSSRules);
+    const caseHistoryCSSRules = "@scope (#newTabFieldDiv) { :scope { --focusHighlight: light-dark(rgba(27, 91, 142, .15), rgba(120, 190, 33, .3));"
+    + "#caseHistory { position: fixed; display: block; translate: -70%; z-index: 999; background-color: light-dark(#eee, #212121); border: 2px solid light-dark(#0075c5, #036cb4); padding: 0px; line-height: 26px; min-width: 26em; text-wrap: nowrap;"
+    + "& > div { display: grid; grid-template-columns: 12ch 7fr 8ch; overflow: hidden; gap: 3ch; cursor: pointer; padding: 5px 11px; border: none; box-shadow: none !important; outline: none !important;"
+    + "&.caseHistoryFocus { background: linear-gradient(to bottom, transparent 0, var(--focusHighlight) 35% 65%, transparent 100%); } } } } }"
+    const caseHistoryCSS = addCSSStyleSheet(caseHistoryCSSRules)
+    const toggleSliderCSSRules = Object.values({
+        hideDefaultCheckboxes: ".switch input { opacity: 0; width: 0; height: 0; }",
+        slider: ".slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; }",
+        sliderBefore: '.slider:before { position: absolute; content: ""; height: 1em; width: 1em; left: .35em; bottom: .3em; background-color: white; transition: .4s; }',
+        sliderColor: ".slider-always-color { gap: unset !important; .slider { background-color: light-dark(#0075c5, #036cb4) !important; } }",
+        sliderChecked: "input:checked + .slider { background-color: light-dark(#0075c5, #036cb4); } input:focus + .slider { box-shadow: 0 0 1px light-dark(#0075c5, #036cb4); } input:checked + .slider:before { translate: 1.8em; }",
+        sliderRound: ".slider.round { border-radius: 1em; border: 1px solid #eeeeee90; }",
+        sliderRoundBefore: ".slider.round:before { border-radius: 50%; }",
+        toggleSlider: ".toggle-slider { display: flex; gap: 10px; align-items: center;",
+        switch: "& > label.switch { font-size: 12px; } } .switch { position: relative; display: inline-block; width: 3.5em; height: 1.55em; margin: 0 !important; } }"
+    }).join(' ');
+    const toggleSliderCSS = addCSSStyleSheet(toggleSliderCSSRules)
     !function wonksHover() {
         const wonksHoverCSS = addCSSStyleSheet()
         gbl.eles.caseWonksVersion.addEventListener('mouseenter', () => { wonksHoverCSS.replaceSync('.wonks { border: 1px solid red; }') });
         gbl.eles.caseWonksVersion.addEventListener('mouseleave', () => { wonksHoverCSS.replaceSync('') });
         gbl.eles.caseWonksVersion.addEventListener('click', () => { window.open("https://github.com/MECH2-at-Github/CaseWorks/", "_blank") });
     }();
-    // const tableRules = {
-    //     uselessMenu: ''
-    // };
-    // const customTableRules = new Map([
-    //     ["CaseFile", 'table[summary="Document Processing Center"] {} table[summary="FSE Electronic File Cabinet"] {}']
-    // ]).get(page.alias);
+    // !function pageSpecificTableCSS() {
+    //     const pageSpecificTableCSSRules = new Map([ // format: ["Alias", [ ['table', 'rules'], ] ],
+    //         ["CaseFile", [ ['table[summary="Document Processing Center"]', ''], ['table[summary="FSE Electronic File Cabinet"]', ''] ] ],
+    //         // ["Alias", [ ['table', 'rules'], ] ],
+    //     ]).get(page.alias)
+    //     if (!pageSpecificTableCSSRules.length) { return };
+    //     addCSSStyleSheet( pageSpecificTableCSSRules.map(([scope, rules]=[]) => "@scope (" + scope + ") { scope: {" + rules + "} }").join(' ') )
+    // }();
 }();
 
 const caseFileCaseData = (() => { // used for case history and fixing page title // fse, mse correct //
@@ -418,16 +443,14 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     if (!splitCaseData.caseNum) { return { caseNum: undefined, caseName: undefined } };
     if (["fse", "mse", ].includes(editionCode)) {
         splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10)
-        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;', title: "Left click to copy #. Right click to open on Doc Disc." }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
+        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;', title: "Left click: Copy Case Number.\nRight click: Open Document Discovery page." }), caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum })
         splitCaseData.caseName !== edition.notFound
             ? caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, createNewEle('div', { textContent: splitCaseData.caseName }) )
         : caseIdNameEleReplacement.append( createNewEle('div', { textContent: "Client Detail Not Found In Repository For Case " }), caseNumEle )
         caseIdNameEle.replaceWith( caseIdNameEleReplacement );
 
         caseIdNameEleReplacement.addEventListener('click', clickEvent => { snackBar(splitCaseData.caseNum, "Copied!", true) });
-        caseIdNameEleReplacement.addEventListener('contextmenu', () => { window.open(openLinkFormatter("DocumentDiscovery", splitCaseData.caseNum), "_blank") } ); // TODO: window.open(openLinkFormatter(DocumentDiscovery, splitCaseData.caseNum), "_blank")
-        // caseIdNameEleReplacement.addEventListener('contextmenu', () => { window.open("/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } ); // TODO: window.open(openLinkFormatter(DocumentDiscovery, splitCaseData.caseNum), "_blank")
-        // caseNumEle.addEventListener('contextmenu', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/CWRF/Document%20Discovery.aspx?" + edition.docDiscSearch + "=" + splitCaseData.caseNum, "_blank") } );
+        caseIdNameEleReplacement.addEventListener('contextmenu', () => { window.open(openLinkFormatter("DocumentDiscovery", splitCaseData.caseNum), "_blank") } );
     };
     return splitCaseData;
 })();
@@ -437,9 +460,7 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     !function mainPageLink() {
         gbl.eles.navContainer.append( gbl.eles.homePageLink )
         gbl.eles.homePageLink.addEventListener('click', () => { window.open(openLinkFormatter("Home"), "_self") });
-        // gbl.eles.homePageLink.addEventListener('click', () => { window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_self") });
         gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open(openLinkFormatter("Home"), "_blank"); });
-        // gbl.eles.homePageLink.addEventListener('contextmenu', contextmenuEvent => { contextmenuEvent.preventDefault(); window.open("https://" + editionCode + countyCode + ".caseworkscloud.com/", "_blank"); });
     }();
     !function addVersion() { mainBody.querySelector('#RibbonContainer-TabRowRight').append( gbl.eles.caseWonksVersion ) }();
     // Link to "All Docs" in Nav Bar? (would need to store the username from the Home Page)
@@ -573,13 +594,15 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     }(); //======================== Case_History | New_Tab_Case_Number_Field Section_End ===================================//
 }();
 const editPropertiesWindow = {
-    editPropEles: { editPropTLO: undefined, editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, editDocBox: undefined, editMaxis: undefined, },
+    editPropEles: { editPropTLO: undefined, editIframe: undefined, editIframeContainer: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, editDocBox: undefined, },
     watchForWindow() {
+            verbose("watching for new editPropEles windows")
         let editPropEles = this.editPropEles
         this.editPropEles.editPropTLO = Array.from(mainBody.children).find(ele => ele.className.includes("ms-dlgContent"))
         const watchForPropObserver = new MutationObserver(() => {
             this.editPropEles.editPropTLO ??= Array.from(mainBody.children).find(ele => ele.className.includes("ms-dlgContent"))
             if (!editPropEles.editPropTLO) { return };
+            verbose("editPropEles.editPropTLO found")
             this.watchWindow()
             watchForPropObserver.disconnect()
         });
@@ -588,14 +611,18 @@ const editPropertiesWindow = {
     watchWindow() {
         let editPropEles = this.editPropEles
         const editPropObserver = new MutationObserver(() => {
-            this.editPropEles.editMaxis = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer').querySelector('iframe').contentDocument.querySelector('[title="MAXIS"]')
-            if (!editPropEles.editMaxis) { return };
-            this.editPropEles.editRootNode = editPropEles.editMaxis.getRootNode();
-            this.editPropEles.editIframe = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer');
+            verbose("Edit prop title: ", editPropEles.editPropTLO.querySelector('#dialogTitleSpan').textContent)
+            let inputTextEle = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer').querySelector('iframe').contentDocument.querySelector('input[type=text]')
+            if (!inputTextEle) { return };
+            editPropEles.editPropTLO.focus()
+            this.editPropEles.editRootNode = inputTextEle.getRootNode();
+            this.editPropEles.editIframeContainer = editPropEles.editPropTLO.querySelector('.ms-dlgFrameContainer');
+            this.editPropEles.editIframe = editPropEles.editIframeContainer.querySelector('iframe')
             this.editPropEles.editDropDown = editPropEles.editRootNode.querySelector('#ui-id-2');
             this.editPropEles.editDocType = editPropEles.editRootNode.querySelector('[title="DocType Required Field"]');
             this.editPropEles.editDocBox = editPropEles.editRootNode.querySelector('[title="DocBox"]')
-            if (this.checkIfSubscription()) { editPropObserver.disconnect(); return };
+            this.watchForWindowRemoval()
+            if (this.editPropWindowCategory()) { editPropObserver.disconnect(); return };
             this.checkDocType()
             if (caseWonksDataSet.data.userName && editPropEles.editDocBox) {
                 editPropEles.editDocBox.closest('tr').append( createNewEle('style', { textContent: "@scope { br { display: none; } select, button { display: inline-block; } }" }) )
@@ -605,7 +632,6 @@ const editPropertiesWindow = {
             };
             const editDropDownObserver = new MutationObserver(() => { this.checkDocType() });
             editDropDownObserver.observe(editPropEles.editDropDown, { attributes: true, attributeFilter: ['style'] });
-            this.watchForWindowRemoval()
             editPropObserver.disconnect()
         });
         editPropObserver.observe(editPropEles.editPropTLO, { childList: true, subtree: true });
@@ -614,27 +640,26 @@ const editPropertiesWindow = {
         let editPropEles = this.editPropEles
         verbose("watching for window removals")
         const removalObserver = new MutationObserver(() => {
-            if (editPropEles.editRootNode?.parentElement) { return };
+            if (mainBody.contains(editPropEles.editIframe)) { return };
             if (!editPropEles.editPropTLO || !editPropEles.editPropTLO.isConnected) {
                 verbose("editPropEles.editPropTLO removed");
-                editPropEles = { editPropTLO: undefined, editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
+                editPropEles = { editPropTLO: undefined, editIframe: undefined, editIframeContainer: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
                 this.watchForWindow()
             } else {
-                verbose("editPropEles.editRootNode removed");
-                editPropEles = { editIframe: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
+                verbose("editPropEles.editRootNode removed. Returning to watchWindow");
+                editPropEles = { editIframe: undefined, editIframeContainer: undefined, editDocType: undefined, editRootNode: undefined, editDropDown: undefined, }
                 this.watchWindow()
             };
             removalObserver.disconnect()
         });
         removalObserver.observe(mainBody, { childList: true, });
-        removalObserver.observe(editPropEles.editIframe, { childList: true, });
+        removalObserver.observe(editPropEles.editIframeContainer, { childList: true, });
     },
     checkDocType() {
         let editPropEles = this.editPropEles
         if (!editPropEles.editDocType) { return };
-        if (["BULK", "MNB0"].includes(editPropEles.editDocType.value.slice(0, 4))) { editPropEles.editDocType.setAttribute('style', "color: red !important;") }
-        else { editPropEles.editDocType.removeAttribute('style');
-        };
+        if (["BULK", "MNB0"].includes( editPropEles.editDocType.value.slice(0, 9).replace(/^\d\.\d\d? /, '').slice(0, 4) )) { editPropEles.editDocType.setAttribute('style', "color: red !important;") }
+        else { editPropEles.editDocType.removeAttribute('style') };
         if (["DHS3550"].includes(editPropEles.editDocType.value.split(" ")[0])) { this.addSubButton(editPropEles.editRootNode) }
         else { editPropEles.editRootNode.querySelector('#subButton')?.remove() };
     },
@@ -650,6 +675,7 @@ const editPropertiesWindow = {
             epAddSubButton.addEventListener('click', () => {
                 epEles.epPriority.checked = true
                 epEles.epShortNote.value = "sub'd"
+                // epEles.epShortNote.value = epEles.epShortNote.value.includes("EXPEDITED") ? "sub'd expedited" : "sub'd"
                 localStorage.setItem('CaseWonks.sub', JSON.stringify({ maxis: epEles.epMaxis.value, name: epEles.epFirstName.value + " " + epEles.epLastName.value, docBox: epEles.epDocBox.value }));
                 let epSubParam = epEles.epDocBox.closest('tr').style.display === "none" ? "SortField%3DCreated-SortDir%3DDesc" : "FilterField1%3DDocBox-FilterValue1%3D" + epEles.epDocBox.value // can't use openLinkFormatter without adding another param to the function //
                 window.open("/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=" + epSubParam, "_blank")
@@ -657,23 +683,34 @@ const editPropertiesWindow = {
             });
         }();
     },
-    checkIfSubscription() {
-        let editPropEles = this.editPropEles
-        if (editPropEles.editPropTLO.querySelector('#dialogTitleSpan')?.textContent.includes("Subscription")) {
-            if (gbl.refVars.wonksSubLS) {
-                let addSubContainer = createNewEle('td', { classList: "wonks" }), addSubEnterDataButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks-button" });
-                addSubContainer.append(addSubEnterDataButton)
-                editPropEles.editRootNode.querySelector('.ms-toolbar input[id*=toolBarTbl_]').closest('td').insertAdjacentElement('beforebegin', addSubContainer)
-                addSubEnterDataButton.addEventListener('click', () => {
-                    editPropEles.editRootNode.querySelector('[title="MAXIS"]').value = gbl.refVars.wonksSubLS.maxis
-                    editPropEles.editRootNode.querySelector('[title="DocBox"]').value = gbl.refVars.wonksSubLS.docBox
-                    editPropEles.editRootNode.querySelector('[title="Title Required Field"]').value = gbl.refVars.wonksSubLS.name
-                    localStorage.removeItem('CaseWonks.sub')
-                });
-            } else { editPropEles.editRootNode.querySelector('[title="Title Required Field"]').focus() };
-            return 1;
+    editPropWindowCategory() {
+        let editPropEles = this.editPropEles, titleSpanFirstWord = editPropEles.editPropTLO.querySelector('#dialogTitleSpan')?.textContent.split(" ")[0]
+        verbose(titleSpanFirstWord)
+        switch(titleSpanFirstWord) {
+            case "Subscription": this.subscriptionWindow(); return 1;
+            case "Connect": this.connectYourSMI(); return 1;
+            default: return 0;
         };
-        return 0;
+    },
+    connectYourSMI() {
+        // let editPropEles = this.editPropEles
+        verbose("What about SMI? SMI's ME!")
+        this.editPropEles.editRootNode.querySelector('#ctl00_PlaceHolderMain_txtSMIUsername').focus()
+    },
+    subscriptionWindow() {
+        let editPropEles = this.editPropEles
+        if (gbl.refVars.wonksSubLS && window.location.hash.includes("DocBox-FilterValue")) {
+            let addSubContainer = createNewEle('td', { classList: "wonks" }), clearSubData = createNewEle('button', { type: "Button", textContent: "Clear Sub Data", id: "clearSubData", classList: "wonks-button" }), addSubEnterDataButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks-button" });
+            addSubContainer.append(addSubEnterDataButton)
+            editPropEles.editRootNode.querySelector('.ms-toolbar input[id*=toolBarTbl_]').closest('td').insertAdjacentElement('beforebegin', clearSubData).insertAdjacentElement('beforebegin', addSubContainer)
+            addSubEnterDataButton.addEventListener('click', () => {
+                editPropEles.editRootNode.querySelector('[title="MAXIS"]').value = gbl.refVars.wonksSubLS.maxis
+                editPropEles.editRootNode.querySelector('[title="DocBox"]').value = gbl.refVars.wonksSubLS.docBox
+                editPropEles.editRootNode.querySelector('[title="Title Required Field"]').value = gbl.refVars.wonksSubLS.name
+                localStorage.removeItem('CaseWonks.sub')
+            });
+            clearSubData.addEventListener('click', () => { localStorage.removeItem('CaseWonks.sub') });
+        } else { editPropEles.editRootNode.querySelector('[title="Title Required Field"]').focus() };
     },
 };
 editPropertiesWindow.watchForWindow();
@@ -724,20 +761,20 @@ function DocDisc() {
 
     gbl.eles.hideNotificationsSlider = createSlider({ textContent: "Hide Notifications", title: "Show or Hide 'Notification' rows.", checked: fromCaseFile, id: "hideNotificationsSliderCheck" })
     gbl.eles.hideNotificationsStyle = addCSSStyleSheet(fromCaseFile === "checked" ? ".hideNotifications { display: none; }" : ".hideNotifications {}")
-    gbl.eles.hideNotificationsSlider?.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideNotifications", gbl.eles.hideNotificationsStyle) });
+    gbl.eles.hideNotificationsSlider.checkbox?.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideNotifications", gbl.eles.hideNotificationsStyle) });
 
     gbl.eles.hideDeletedSlider = createSlider({ textContent: "Hide Deleted", title: "Show or Hide 'DeletedDPC' rows.", checked: "checked", id: "hideDeletedSliderCheck" })
     gbl.eles.hideDeletedStyle = addCSSStyleSheet(".hideDeleted { display: none; }")
-    gbl.eles.hideDeletedSlider?.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideDeleted", gbl.eles.hideDeletedStyle) });
+    gbl.eles.hideDeletedSlider?.checkbox.addEventListener('click', clickEvent => { toggleSliderVisibility(clickEvent.target.checked, "hideDeleted", gbl.eles.hideDeletedStyle) });
 
-    gbl.eles.navContainer?.append(gbl.eles.hideNotificationsSlider, gbl.eles.hideDeletedSlider)
+    gbl.eles.navContainer?.append(gbl.eles.hideNotificationsSlider.container, gbl.eles.hideDeletedSlider.container)
 
     setTimeout(() => {
         !!window.location.search && document.querySelector('.dpcTableLoc')?.scrollIntoView({ inline: "start" })
-        if (document.querySelectorAll('.hideNotifications').length) { selectNotifications() };
+        if (document.querySelectorAll('.hideNotifications').length) { addSelectNotificationsButton() };
     }, 500);
 
-    function selectNotifications() {
+    function addSelectNotificationsButton() {
         gbl.eles.selectNotifications = createNewEle('button', { type: "button", textContent: "Select Notifications", style: "color: light-dark(#222, #efefef); border-radius: 6px; padding: 5px 10px;", classList: "wonks" })
         dpcH2.append(gbl.eles.selectNotifications)
         gbl.eles.selectNotifications.addEventListener('click', () => {
@@ -783,189 +820,203 @@ function Scan() {
 //         };
     // }();
 };
-async function Subs() {
-    const compareOpenButton = createNewEle('button', { type: "button", textContent: "Compare", classList: "wonks-button" }),
-          compareResetButton = createNewEle('button', { type: "button", textContent: "Reset", classList: "hidden wonks-button" }),
-          hideButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px; flex-direction: column; margin-top: 25px; width: 130px;", classList: "hidden wonks" }),
-          hideMatchedButton = createNewEle('button', { type: "button", textContent: "Hide Matched", id: "hideMatched", style: "margin: 0;", classList: "wonks-button" }, { hiding: "no" }),
-          hideMatchedStyle = createNewEle('style', { textContent: "@scope (#scriptWPQ1 table tbody) { :scope { .compareMatch, .newEntry { display: none !important; } } } #hideMatched { color: red !important; } #hideWarning { display: block !important; }" }),
-          hideUnmatchedButton = createNewEle('button', { type: "button", textContent: "Hide Unmatched", id: "hideUnmatched", style: "margin: 0;", classList: "wonks-button" }, { hiding: "no" }),
-          hideUnmatchedStyle = createNewEle('style', { textContent: "@scope (#scriptWPQ1 table tbody) { :scope { .unmatched, .duplicateMatch { display: none !important; } } } #hideUnmatched { color: red !important; } #hideWarning { display: block !important; }" }),
-          hideWarning = createNewEle('span', { textContent: "Don't drag-down while hiding rows.", id: "hideWarning", style: "font-style: italic; display: none;" }),
-          compareDialog = createNewEle('dialog', { id: "compareDialog" }),
-          compareTextarea = createNewEle('textarea', { id: "compareTextarea" }),
-          compareOkButton = createNewEle('button', { type: "button", textContent: "OK", classList: "wonks-button" }),
-          compareCancelButton = createNewEle('button', { type: "button", textContent: "Cancel", classList: "wonks-button" }),
-          compareContainer = createNewEle('div', { style: "margin: 70px 0 0 25px; display: flex; flex-direction: column; gap: 10px;", classList: "hidden wonks" }),
-          dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div', { style: "margin-left: 5px;"}),
-          colorCoding = createNewEle('div', { textContent: "Color legend:"}),
-          uniqueCases = createNewEle('div'), matchedCount = createNewEle('div'),
-          compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:" }),
-          compareMissingList = createNewEle('div', { style: "margin-left: 5px;"})
+function Subs() {
+    !async function compareSubLists() {
+        const compareOpenButton = createNewEle('button', { type: "button", textContent: "Compare", classList: "wonks-button" }),
+              compareResetButton = createNewEle('button', { type: "button", textContent: "Reset", classList: "hidden wonks-button" }),
+              hideButtonContainer = createNewEle('div', { style: "display: flex; gap: 5px; flex-direction: column; margin-top: 25px; width: 130px;", classList: "hidden wonks" }),
+              hideMatchedButton = createNewEle('button', { type: "button", textContent: "Hide Matched", id: "hideMatched", style: "margin: 0;", classList: "wonks-button" }, { hiding: "no" }),
+              hideMatchedStyle = createNewEle('style', { textContent: "@scope (#scriptWPQ1 table tbody) { :scope { .compareMatch, .newEntry { display: none !important; } } } #hideMatched { color: red !important; } #hideWarning { display: block !important; }" }),
+              hideUnmatchedButton = createNewEle('button', { type: "button", textContent: "Hide Unmatched", id: "hideUnmatched", style: "margin: 0;", classList: "wonks-button" }, { hiding: "no" }),
+              hideUnmatchedStyle = createNewEle('style', { textContent: "@scope (#scriptWPQ1 table tbody) { :scope { .unmatched, .duplicateMatch { display: none !important; } } } #hideUnmatched { color: red !important; } #hideWarning { display: block !important; }" }),
+              hideWarning = createNewEle('span', { textContent: "Don't drag-down while hiding rows.", id: "hideWarning", style: "font-style: italic; display: none;" }),
+              compareDialog = createNewEle('dialog', { id: "compareDialog" }),
+              compareTextarea = createNewEle('textarea', { id: "compareTextarea" }),
+              compareOkButton = createNewEle('button', { type: "button", textContent: "OK", classList: "wonks-button" }),
+              compareCancelButton = createNewEle('button', { type: "button", textContent: "Cancel", classList: "wonks-button" }),
+              compareContainer = createNewEle('div', { style: "margin: 70px 0 0 25px; display: flex; flex-direction: column; gap: 10px;", classList: "hidden wonks" }),
+              dupeCaseContainer = createNewEle('div', { textContent: "Duplicate List:" }), dupeCaseList = createNewEle('div', { style: "margin-left: 5px;"}),
+              colorCoding = createNewEle('div', { textContent: "Color legend:"}),
+              uniqueCases = createNewEle('div'), matchedCount = createNewEle('div'),
+              compareMissingContainer = createNewEle('div', { textContent: "Missing Case Numbers:" }),
+              compareMissingList = createNewEle('div', { style: "margin-left: 5px;"})
 
-    gbl.eles.navContainer.append( ...arrangeElements( [createNewEle('div'), [ compareOpenButton, compareResetButton ], ]) );
-    gbl.eles.navContainer.append(hideButtonContainer);
-    !function addElesToDocBody() {
-        document.getElementById('contentRow')?.append(
-            ...arrangeElements(
-                [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
-                 compareDialog,
-                 [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
-                  compareTextarea,
-                  createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center; margin-top: 15px;" }),
-                  [compareOkButton,
-                   compareCancelButton
-                  ],
-                 ],
-                 compareContainer,
-                 [colorCoding,
-                  [createNewEle('div', { style: "margin-left: 5px; font-weight: 550;" }),
-                   [createNewEle('div', { classList: 'compareMatch', textContent: 'Case # Found' }),
-                    createNewEle('div', { classList: 'duplicateMatch', textContent: 'Duplicate Entry' }),
-                    createNewEle('div', { classList: 'newEntry', textContent: 'Newer Entry' }),
-                    createNewEle('div', { textContent: 'Not matched' })
-                   ],
-                  ],
-                  dupeCaseContainer,
-                  [dupeCaseList,
-                  ],
-                  uniqueCases,
-                  matchedCount,
-                  compareMissingContainer,
-                  [compareMissingList,
-                  ],
-                  hideButtonContainer,
-                  [hideMatchedButton,
-                   hideUnmatchedButton,
-                   hideWarning
-                  ],
-                 ],
-                ])
-        );
+        gbl.eles.navContainer.append( ...arrangeElements( [createNewEle('div'), [ compareOpenButton, compareResetButton ], ]) );
+        gbl.eles.navContainer.append(hideButtonContainer);
+        !function addElesToDocBody() {
+            document.getElementById('contentRow')?.append(
+                ...arrangeElements(
+                    [createNewEle('style', { textContent: "@scope (#compareDialog) { :scope { dialog[open] { display: flex; flex-direction: column; gap: 10px; } textarea { width: 600px; height: 400px; } } } #scriptWPQ1 table tbody tr { font-weight: 550 !important; } .newEntry {&,& * { color: light-dark(#339f33, #76f776) !important; }} .compareMatch {&,& * { color: light-dark(#a36139, #ffa700) !important; }} .duplicateMatch {&,& * { color: light-dark(#ee0000, #ff2626) !important; }}" }),
+                     compareDialog,
+                     [createNewEle('div', { textContent: "Paste list of cases, comma separated." }),
+                      compareTextarea,
+                      createNewEle('div', { style: "display: flex; gap: 10px; justify-content: center; margin-top: 15px;" }),
+                      [compareOkButton,
+                       compareCancelButton
+                      ],
+                     ],
+                     compareContainer,
+                     [colorCoding,
+                      [createNewEle('div', { style: "margin-left: 5px; font-weight: 550;" }),
+                       [createNewEle('div', { classList: 'compareMatch', textContent: 'Case # Found' }),
+                        createNewEle('div', { classList: 'duplicateMatch', textContent: 'Duplicate Entry' }),
+                        createNewEle('div', { classList: 'newEntry', textContent: 'Newer Entry' }),
+                        createNewEle('div', { textContent: 'Not matched' })
+                       ],
+                      ],
+                      dupeCaseContainer,
+                      [dupeCaseList,
+                      ],
+                      uniqueCases,
+                      matchedCount,
+                      compareMissingContainer,
+                      [compareMissingList,
+                      ],
+                      hideButtonContainer,
+                      [hideMatchedButton,
+                       hideUnmatchedButton,
+                       hideWarning
+                      ],
+                     ],
+                    ])
+            );
+        }();
+        let today = Date.now()
+        let tableAncestor = await tableLocator('#scriptWPQ1', mainBody)
+        const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')?.textContent?.slice(0, 4).toUpperCase()
+        let editMode = editLinkText()
+        let existingTableQuery = ['#spgridcontainer_WPQ1_leftpane_mainTable > tbody', 'table[summary] > tbody', ]
+        let existingTable = await tableLocator(existingTableQuery, tableAncestor)
+        if (gbl.refVars.wonksSubLS) {
+            Array.from(existingTable.querySelectorAll('tbody tr'), ele => {
+                let caseNumSubs = ele.children[4].textContent
+                if (/[^ ]/.test(caseNumSubs)) { ele.classList.add(caseNumSubs) };
+            });
+            let alreadySubbed = document.getElementsByClassName(gbl.refVars.wonksSubLS.maxis)?.[0]
+            if (alreadySubbed) {
+                alreadySubbed?.scrollIntoView({ block: "center" })
+                alreadySubbed.style.backgroundColor = "yellow"
+                localStorage.removeItem('CaseWonks.sub')
+            } else {
+                document.getElementById('idHomePageNewItem').click()
+            };
+        };
+        const rowMap = new Map()
+        monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor, ifTableDestroyed)
+        function ifTableDestroyed(newTable) {
+            existingTable = newTable
+            editMode = editLinkText()
+            if (!rowMap.size) { return }; // if not already done, don't auto run check //
+            checkForDuplicateSubs(true)
+        };
+        function setVarsBasedOnEditMode(tr) {
+            switch(editMode) {
+                case "EDIT": return { caseIdNum: tr?.children[4]?.textContent?.trim(), entryDate: tr?.children[6]?.textContent?.trim() };
+                case "STOP": return { caseIdNum: tr?.children[3]?.textContent?.trim(), entryDate: tr?.children[5]?.textContent?.trim() };
+            };
+        };
+        async function checkForDuplicateSubs(followWithOkEvent) {
+            dupeCaseList.replaceChildren()
+            const caseListTrs = Array.from( existingTable?.querySelectorAll('tr:not(.ms-viewheadertr)') )
+            rowMap.clear()
+            caseListTrs.forEach(tr => {
+                let caseIdNum = testCaseNumValidity(setVarsBasedOnEditMode(tr).caseIdNum)
+                if (!caseIdNum) { return };
+                if (rowMap.has(caseIdNum)) {
+                    tr.classList.add('duplicateMatch')
+                    dupeCaseList.append( createNewEle('div', { textContent: caseIdNum }) )
+                    return;
+                };
+                rowMap.set(caseIdNum, tr)
+            });
+            uniqueCases.textContent = "Unique Count: " + rowMap.size
+            showElement(compareContainer, true)
+            showElement(hideButtonContainer, true)
+            if (followWithOkEvent) { okEvent() };
+        };
+        compareOpenButton.addEventListener('click', () => {
+            compareDialog.showModal()
+            checkForDuplicateSubs()
+            showElement(compareResetButton, true)
+        });
+        compareResetButton.addEventListener('click', () => {
+            Array.from( existingTable.querySelectorAll('tr:is(.duplicateMatch, .compareMatch, .newEntry, .unmatched)'), ele => ele.classList.remove('duplicateMatch', 'compareMatch', 'newEntry', 'unmatched') );
+            compareMissingList.replaceChildren()
+            dupeCaseList.replaceChildren();
+            showElement(compareResetButton, false)
+            showElement(compareContainer, false)
+            showElement(hideButtonContainer, false)
+            matchedCount.textContent = ""
+            rowMap.clear()
+        });
+        compareTextarea.addEventListener('keydown', keydownEvent => {
+            switch(keydownEvent.key) {
+                case "Enter": keydownEvent.preventDefault(); okEvent(); break;
+                case "Escape": keydownEvent.preventDefault(); cancelEvent(); break;
+            };
+        })
+        compareOkButton.addEventListener('click', okEvent);
+        compareCancelButton.addEventListener('click', cancelEvent );
+        hideButtonContainer.addEventListener('click', ({ target: clickedButton } = {}) => {
+            switch(clickedButton) {
+                case hideMatchedButton: { hideMatched(); return; }
+                case hideUnmatchedButton: { hideUnmatched(); return; }
+                default: break;
+            };
+            function hideMatched() {
+                if (hideUnmatchedButton.dataset.hiding === "yes") { hideUnmatchedStyle?.remove(); hideUnmatchedButton.dataset.hiding = "no" };
+                if (hideMatchedButton.dataset.hiding === "no") { document.head.append(hideMatchedStyle); hideMatchedButton.dataset.hiding = "yes" }
+                else { hideMatchedStyle?.remove(); hideMatchedButton.dataset.hiding = "no" };
+            };
+            function hideUnmatched() {
+                if (hideMatchedButton.dataset.hiding === "yes") { hideMatchedStyle?.remove(); hideMatchedButton.dataset.hiding = "no" };
+                if (hideUnmatchedButton.dataset.hiding === "no") { document.head.append(hideUnmatchedStyle); hideUnmatchedButton.dataset.hiding = "yes" }
+                else { hideUnmatchedStyle?.remove(); hideUnmatchedButton.dataset.hiding = "no" };
+            };
+        });
+        function updateMatchedStyles(caseNumberListHasValue) {
+            switch (caseNumberListHasValue) {
+                case true:
+                    hideMatchedStyle.textContent = "@scope (#scriptWPQ1 table tbody) { :scope { .compareMatch, .newEntry { display: none !important; } } } #hideMatched { color: red !important; } #hideWarning { display: block !important; }"
+                    hideUnmatchedStyle.textContent = "@scope (#scriptWPQ1 table tbody) { :scope { .unmatched, .duplicateMatch { display: none !important; } } } #hideUnmatched { color: red !important; } #hideWarning { display: block !important; }"
+                    break;
+                case false:
+                    hideMatchedStyle.textContent = "@scope (#scriptWPQ1 table tbody) { :scope { .duplicateMatch { display: none !important; } } } #hideMatched { color: red !important; } #hideWarning { display: block !important; }"
+                    hideUnmatchedStyle.textContent = "@scope (#scriptWPQ1 table tbody) { :scope { .unmatched { display: none !important; } } } #hideUnmatched { color: red !important; } #hideWarning { display: block !important; }"
+                    break;
+            };
+        };
+        function okEvent() {
+            if (!compareTextarea?.value) { cancelEvent(); return };
+            updateMatchedStyles(true)
+            compareTextarea.value = compareTextarea.value.trim().replace(/\n/g, '')
+            if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
+            let missingCasesFromPasted = []
+            let pastedCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
+            pastedCaseList.forEach(caseNum => {
+                let matchedRow = rowMap.get(caseNum)
+                if (!matchedRow) {
+                    missingCasesFromPasted.push(caseNum)
+                    return;
+                };
+                matchedRow?.classList.add('compareMatch')
+            });
+            compareDialog.close()
+            compareMissingList.replaceChildren()
+            compareMissingList.append(...missingCasesFromPasted.map(caseNum => createNewEle('div', { textContent: caseNum + "," }) ))
+            matchedCount.textContent = "Match Count: " + (pastedCaseList.length - missingCasesFromPasted.length) + '/' + pastedCaseList.length
+            Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch, .ms-viewheadertr)'), tr => {
+                let entryDate = Date.parse(setVarsBasedOnEditMode(tr).entryDate)
+                if ((today - entryDate) < 2592000000) { tr.classList.add('newEntry') } // less than 30 days //
+                else { tr.classList.add('unmatched') }
+            });
+        };
+        function cancelEvent() {
+            Array.from(existingTable.querySelectorAll('tr:not(.duplicateMatch, .ms-viewheadertr)'), ele => ele.classList.add('unmatched') );
+            updateMatchedStyles(false)
+            compareDialog.close();
+        };
     }();
-    let today = Date.now()
-    let tableAncestor = await tableLocator('#scriptWPQ1', mainBody)
-    const editLinkText = () => tableAncestor.querySelector('#Hero-WPQ1 .ms-heroCommandLink[title="Edit this list using Quick Edit mode."], #Hero-WPQ1 .ms-heroCommandLink[title="Stop editing and save changes."]')?.textContent?.slice(0, 4).toUpperCase()
-    let editMode = editLinkText()
-    let existingTableQuery = ['#spgridcontainer_WPQ1_leftpane_mainTable > tbody', 'table[summary] > tbody', ]
-    let existingTable = await tableLocator(existingTableQuery, tableAncestor)
-    if (gbl.refVars.wonksSubLS) {
-        Array.from(existingTable.querySelectorAll('tbody tr'), ele => { ele.classList.add(ele.children[4].textContent) });
-        let alreadySubbed = document.getElementsByClassName(gbl.refVars.wonksSubLS.maxis)?.[0]
-        if (alreadySubbed) {
-            alreadySubbed?.scrollIntoView({ block: "center" })
-            alreadySubbed.style.backgroundColor = "yellow"
-            localStorage.removeItem('CaseWonks.sub')
-        };
-    };
-    const rowMap = new Map()
-    monitorForTableDestruction(existingTable, existingTableQuery, tableAncestor, ifTableDestroyed)
-    function ifTableDestroyed(newTable) {
-        existingTable = newTable
-        editMode = editLinkText()
-        if (!rowMap.size) { return }; // if not already done, don't auto run check //
-        checkForDuplicateSubs(true)
-    };
-    function setVarsBasedOnEditMode(tr) {
-        switch(editMode) {
-            case "EDIT": return { caseIdNum: tr?.children[4]?.textContent?.trim(), entryDate: tr?.children[6]?.textContent?.trim() };
-            case "STOP": return { caseIdNum: tr?.children[3]?.textContent?.trim(), entryDate: tr?.children[5]?.textContent?.trim() };
-        };
-    };
-    async function checkForDuplicateSubs(followWithOkEvent) {
-        dupeCaseList.replaceChildren()
-        const caseListTrs = Array.from( existingTable?.querySelectorAll('tr:not(.ms-viewheadertr)') )
-        rowMap.clear()
-        caseListTrs.forEach(tr => {
-            let caseIdNum = testCaseNumValidity(setVarsBasedOnEditMode(tr).caseIdNum)
-            if (!caseIdNum) { return };
-            if (rowMap.has(caseIdNum)) {
-                tr.classList.add('duplicateMatch')
-                dupeCaseList.append( createNewEle('div', { textContent: caseIdNum }) )
-                return;
-            };
-            rowMap.set(caseIdNum, tr)
-        });
-        uniqueCases.textContent = "Unique Count: " + rowMap.size
-        showElement(compareContainer, true)
-        showElement(hideButtonContainer, true)
-        if (followWithOkEvent) { okEvent() };
-    };
-    compareOpenButton.addEventListener('click', () => {
-        compareDialog.showModal()
-        checkForDuplicateSubs()
-        showElement(compareResetButton, true)
-    });
-    compareResetButton.addEventListener('click', () => {
-        Array.from( existingTable.querySelectorAll('tr:is(.duplicateMatch, .compareMatch, .newEntry, .unmatched)'), ele => ele.classList.remove('duplicateMatch', 'compareMatch', 'newEntry', 'unmatched') );
-        compareMissingList.replaceChildren()
-        dupeCaseList.replaceChildren();
-        showElement(compareResetButton, false)
-        showElement(compareContainer, false)
-        showElement(hideButtonContainer, false)
-        matchedCount.textContent = ""
-        rowMap.clear()
-    });
-    hideButtonContainer.addEventListener('click', ({ target: clickedButton } = {}) => {
-        switch(clickedButton) {
-            case hideMatchedButton: { hideMatched(); return; }
-            case hideUnmatchedButton: { hideUnmatched(); return; }
-            default: break;
-        };
-        function hideMatched() {
-            if (hideUnmatchedButton.dataset.hiding === "yes") {
-                hideUnmatchedStyle.remove();
-                hideUnmatchedButton.dataset.hiding = "no"
-            };
-            if (hideMatchedButton.dataset.hiding === "no") {
-                document.head.append(hideMatchedStyle);
-                hideMatchedButton.dataset.hiding = "yes"
-            } else {
-                hideMatchedStyle.remove();
-                hideMatchedButton.dataset.hiding = "no"
-            };
-        };
-        function hideUnmatched() {
-            if (hideMatchedButton.dataset.hiding === "yes") {
-                hideMatchedStyle.remove();
-                hideMatchedButton.dataset.hiding = "no"
-            };
-            if (hideUnmatchedButton.dataset.hiding === "no") {
-                document.head.append(hideUnmatchedStyle);
-                hideUnmatchedButton.dataset.hiding = "yes"
-            } else {
-                hideUnmatchedStyle.remove();
-                hideUnmatchedButton.dataset.hiding = "no"
-            };
-        };
-    });
-    function okEvent() {
-        if (!compareTextarea?.value) { compareDialog.close(); return };
-        compareTextarea.value = compareTextarea.value.trim().replace(/\n/g, '')
-        if ( (/[^0-9, ]/).test(compareTextarea.value) ) { alert("List contains invalid characters. Only numbers, commas, and spaces allowed."); return };
-        let missingCasesFromPasted = []
-        let pastedCaseList = compareTextarea.value?.trim().split(/, ?/)?.filter(e => e)
-        pastedCaseList.forEach(caseNum => {
-            let matchedRow = rowMap.get(caseNum)
-            if (!matchedRow) {
-                missingCasesFromPasted.push(caseNum)
-                return;
-            };
-            matchedRow?.classList.add('compareMatch')
-        });
-        compareDialog.close()
-        compareMissingList.replaceChildren()
-        compareMissingList.append(...missingCasesFromPasted.map(caseNum => createNewEle('div', { textContent: caseNum + "," }) ))
-        matchedCount.textContent = "Match Count: " + (pastedCaseList.length - missingCasesFromPasted.length) + '/' + pastedCaseList.length
-        Array.from(existingTable.querySelectorAll('tr:not(.compareMatch, .duplicateMatch, .ms-viewheadertr)'), tr => {
-            let entryDate = Date.parse(setVarsBasedOnEditMode(tr).entryDate)
-            if ((today - entryDate) < 2592000000) { tr.classList.add('newEntry') } // less than 30 days //
-            else { tr.classList.add('unmatched') }
-        });
-    };
-    compareTextarea.addEventListener('keydown', keydownEvent => { if (keydownEvent.key === "Enter") { keydownEvent.preventDefault(); okEvent(); } })
-    compareOkButton.addEventListener('click', okEvent);
-    compareCancelButton.addEventListener('click', () => { compareDialog.close(); });
 };
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ PAGE_SPECIFIC SECTION END /////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
@@ -1050,7 +1101,7 @@ async function mainTableVariables(tr) {
     };
     return { checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, birthDate, reviewed, intCase, mnsureId };
 };
-async function efcTableVariables(tr) {
+async function secondaryTableVariables(tr) {
     let checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId
     switch(editionCode) {
         case "fse":
@@ -1069,31 +1120,31 @@ async function efcTableVariables(tr) {
 async function modifyDocumentTables(tableBody) {
     gbl.refVars.currentTbody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
+    modifyTableHeaders(gbl.refVars.currentTbody)
+    modifiedTables.push(gbl.refVars.currentTbody)
     let sortedByCaseNum = gbl.refVars.currentTbody?.closest('table')?.querySelector('.ms-headerSortTitleLink:has(+span:not([style="display: none;"]))')?.textContent === "MAXIS" ?? false
-    const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
+    const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => { // for await? // Array.fromAsync? //
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return }; // because some table headers are in the table body //
             mainTableVariables(tr).then( ({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, intCase, mnsureId } = {}) => {
                 if (["DocDisc"].includes(page.alias)) { addClassToNotificationRows(name, tr); addClassToDeletedRows(docBox, tr) };
                 if (sortedByCaseNum) { gbl.refVars.lastCaseNum = groupByCaseNumIfSorted(gbl.refVars.currentTbody, gbl.refVars.lastCaseNum, docBoxCaseNum, tr) };
-                doModifications({ checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId })
+                doModifications({ currentTbody: gbl.refVars.currentTbody, checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId })
             });
         }();
     });
-    modifyTableHeaders(gbl.refVars.currentTbody)
-    modifiedTables.push(gbl.refVars.currentTbody)
     if (page.alias !== "Subs") { // subs has their own call //
         monitorForTableDestruction(tableBody, 'tbody', gbl.refVars.primaryTableLoc).catch(err => { console.log("monitor error"); console.log(err) })
     };
 };
-async function modifyDocumentTablesEFC(tableBody) {
+async function modifyDocumentTablesSecondary(tableBody) {
     gbl.refVars.currentTbody = await waitForTableCells(tableBody)
     if ( modifiedTables.includes(gbl.refVars.currentTbody) ) { return };
     const tableBodyTrs = Array.from(gbl.refVars.currentTbody.querySelectorAll('tr'), tr => {
         !async function fetchVarsThenDoModifications() {
             if (tr.querySelector('th')) { return };
-            efcTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
-                doModifications({ title, name, shortNote, createdDate, receivedDate, modifiedDate })
+            secondaryTableVariables(tr).then(({ checkbox, title, name, uselessMenu, firstName, lastName, shortNote, docBoxCaseNum, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, intCase, mnsureId } = {}) => {
+                doModifications({ currentTbody: gbl.refVars.currentTbody, title, name, shortNote, createdDate, receivedDate, modifiedDate })
             });
         }();
     });
@@ -1125,14 +1176,14 @@ function groupByCaseNumIfSorted(tableBody, lastCaseNum, docBoxCaseNum, tr) {
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 // //////////////////////////////////////////////////////////////////////////////////// MODIFICATIONS START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-function doModifications({ checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId, }={}) {
+function doModifications({ currentTbody, checkbox, title, name, firstName, lastName, shortNote, docBox, createdDate, createdBy, receivedDate, taxonomy, modifiedDate, modifiedBy, reviewed, birthDate, docBoxCaseNum, intCase, mnsureId, }={}) {
     modifyReviewed(reviewed)
     modifyTitles(title, shortNote)
     modifyShortNote(shortNote)
     modifyName(name)
     switch(editionCode) {
-        case "fse": { modifyCaseNum(docBoxCaseNum, docBox, checkbox); break; }
-        case "mse": { modifyCaseNum(intCase, docBox, checkbox); break; }
+        case "fse": { modifyCaseNum(currentTbody, docBoxCaseNum, checkbox, docBox); break; }
+        case "mse": { modifyCaseNum(currentTbody, intCase, checkbox, docBox); break; }
         default: break;
     };
     modifyTaxonomy(taxonomy)
@@ -1148,7 +1199,6 @@ function modifyTitles(title, shortNote) {
     let originalTdText = title.textContent
     let newTdText = title.textContent
     function modifyBadTitle() {
-        if (!shortNote?.textContent?.length) { return 0 };
         if (title.textContent?.includes('BULK SCAN') && shortNote.textContent?.includes('IM ')) {
             let bulkNoteTitle = shortNote.textContent.replace(/ (-|incl) DHH?S ?[0-9]{4}[A-Z]?/, "")
             replaceChildrenSpan(title, { title: originalTdText, textContent: bulkNoteTitle })
@@ -1159,7 +1209,7 @@ function modifyTitles(title, shortNote) {
             replaceChildrenSpan(title, { title: originalTdText, textContent: appType })
             replaceChildrenSpan(shortNote, { title: shortNote.textContent, textContent: remainingShortNote })
             return 1
-        };
+        } else if (!shortNote?.textContent?.length) { return 0 };
     };
     if (modifyBadTitle()) { return };
     let matches = [...newTdText.matchAll(docTypeRegExp)].map(match => [ match[0], Object.entries(match.groups).filter(([key, val] = []) => val)?.[0]?.[0] ]);
@@ -1171,9 +1221,9 @@ function modifyTitles(title, shortNote) {
     replaceChildrenSpan(title, { title: originalTdText, textContent: newTdText })
     function determineAppType(shortNoteText) {
         let mnbNumbIdx = title.textContent.indexOf('MNB00'), mnbNumb = title.textContent.slice(mnbNumbIdx, mnbNumbIdx+6);
-        if (shortNoteText.includes("CCAP")) { return { appType: "CCAP Application (" + mnbNumb + ")", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
-        else if (shortNoteText.includes("CAF")) { return { appType: "Combined Application (" + mnbNumb + ")", remainingShortNote: shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
-        else { return { appType: "Unknown App Type (" + mnbNumb + ")", remainingShortNote: shortNoteText } };
+        if (shortNoteText?.includes("CCAP")) { return { appType: "CCAP App. (" + mnbNumb + ")", remainingShortNote: "CCAP " + shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else if (shortNoteText?.includes("CAF")) { return { appType: "CAF (" + mnbNumb + ")", remainingShortNote: "CAF " + shortNoteText.replace(/[A-Z0-9_]+_(?:CAF|CCAP)_?/, '') } }
+        else { return { appType: "??? (" + mnbNumb + ")", remainingShortNote: shortNoteText } };
     };
 };
 function modifyShortNote(shortNote) {
@@ -1195,31 +1245,41 @@ function modifyName(name) {
     let nameA = name.querySelector('a')
     let nameNewText = nameA?.textContent?.match(/^([A-Z]{1,3}[0-9]{3,4}[A-Z]? [A-Za-z0-9- ]+|Portal\d00 General [A-Z][a-z]|RG3F01\d IM MNS R3 39)__(?<filenum>[0-9]{4,})_[0-9-]+/)?.groups?.filenum
     nameA.textContent = "(view_" + (nameNewText ?? "item") + ")"
-    if (nameA.href.indexOf("Notification%20-%20Actio__") > -1 || nameA.href.slice(-3) === "txt") { nameA.target = "_blank" };
+    if ( nameA.href.indexOf("Notification%20-%20Actio__") > -1 || ["txt", "jpg"].includes(nameA.href.slice(-3)) ) { nameA.target = "_blank" }; // Action Item Notes - load in new tab. // or jpg image //
+    // nameA.addEventListener('click', clickEvent => {}) // can't get click event to properly trigger the ribbon on CaseFile //
 };
-function modifyCaseNum(tdCaseNum, tdDocBox, tdCheckbox) {
+function modifyCaseNum(currentTbody, tdCaseNum, tdCheckbox, tdDocBox) {
     if (!tdCaseNum) { return };
-    if (!tdCaseNum.textContent) { highlightRemove() };
-    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # // removes spaces as it's by docbox, which can have spaces //
-        highlightEvent({ highlightClassNum: tdDocBox.textContent.replace(" ", ""), tdTableRow: tdDocBox.closest('tr'), tdCheckbox })
+    let tdTableRow = tdCaseNum.closest('tr')
+    let highlightClass = tdCaseNum.textContent ? tdCaseNum.textContent.replace(" ", "") : "noHighlight"
+    if ("DocDisc".includes(page.alias) && window.location.search.indexOf(edition.docDiscSearch) > -1) { // if on DocDisc doing a search by case # // removes spaces as highlight will be grouped by docbox, which can have spaces //
+        highlightClass = tdDocBox.textContent ? tdDocBox.textContent.replace(" ", "") : "noHighlight"
+        tdTableRow.classList.add(highlightClass)
+        highlightEvent({ currentTbody, highlightClass, tdTableRow, tdCheckbox })
         return;
     };
-    if (!tdCaseNum.textContent) { return };
-    let highlightClassNum = tdCaseNum.textContent.trim() ?? ""
-    if (!highlightClassNum) { return };
-    let validCaseNum = testCaseNumValidity(highlightClassNum)
-    if (!validCaseNum) { verbWarn("modifyCaseNum: !validCaseNum", tdCaseNum) };
-    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" }), newLinkA = createNewEle('a', { textContent: highlightClassNum, style: "cursor: pointer;" + (validCaseNum ? "" : " color: red !important;") })
-    newLinkTd.append(newLinkA, copySymbol())
+    let newLinkTd = createNewEle('td', { role: "gridcell", classList: "ms-cellstyle ms-vb2 ms-noWrap" })
     tdCaseNum.replaceWith(newLinkTd)
-    newLinkA?.addEventListener('click', () => { window.open(openLinkFormatter("CaseFile", validCaseNum), "_self") });
+    let validCaseNum = testCaseNumValidity(highlightClass)
+    if (!validCaseNum) { // invalid case number -> don't make into a link //
+        if (highlightClass && highlightClass !== "noHighlight") { verbWarn("modifyCaseNum: !validCaseNum", highlightClass) };
+        newLinkTd.append( createNewEle('span', { textContent: tdCaseNum.textContent, style: "color: red !important;" }) )
+        highlightEvent({ currentTbody, highlightClass: "noHighlight", tdTableRow, tdCheckbox })
+        return;
+    };
+    let newLinkA = createNewEle('a', { textContent: highlightClass, style: "cursor: pointer;" })
+    newLinkTd.append(newLinkA, copySymbol())
+    tdTableRow.classList.add(highlightClass)
+    highlightEvent({ currentTbody, highlightClass, tdTableRow, tdCheckbox })
+    newLinkA?.addEventListener('click', clickEvent => { clickAndCopy(clickEvent); window.open(openLinkFormatter("CaseFile", validCaseNum), "_self") });
     newLinkA?.addEventListener('contextmenu', contextmenuEvent => {
         contextmenuEvent.preventDefault(); contextmenuEvent.stopPropagation(); contextmenuEvent.stopImmediatePropagation();
-        window.open(openLinkFormatter("CaseFile", validCaseNum), "_blank")
+        clickAndCopy(contextmenuEvent); window.open(openLinkFormatter("CaseFile", validCaseNum), "_blank")
     });
-    let tdTableRow = newLinkTd.closest('tr')
-    tdTableRow?.classList.add(highlightClassNum)
-    highlightEvent({ highlightClassNum, tdTableRow, tdCheckbox })
+    function clickAndCopy(event) {
+        copy(tdCaseNum.textContent)
+        tdTableRow.click()
+    };
 };
 function modifyTaxonomy(taxonomy) {
     if (!taxonomy || !taxonomy.textContent) { return };
@@ -1237,39 +1297,44 @@ function modifyCreatedModifiedBy(createdModifiedBy) {
     createdModifiedBy.textContent = createdModifiedBy.textContent.split(/[@ ]/)[0]
 };
 
-!async function modifyTablesAsLoaded() {
+async function modifyTablesAsLoaded() {
     if (!page.hasOwnProperty('primaryTableLoc')) { return };
-    // gbl.refVars.primaryTableLoc ??= await tableLocator(page.primaryTableLoc, mainBody)
     gbl.refVars.primaryTableLoc ??= tableLocQuery('primaryTableLoc')
     if (!gbl.refVars.primaryTableLoc) { return };
     gbl.refVars.primaryTableLoc.classList.add('dpcTableLoc')
     gbl.refVars.primaryTableLoc.addEventListener('mouseleave', () => { visualIndicatorIfPdfSelected() });
-    tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
+    let primaryTbodLoadedEles = tbodLoadedEles(gbl.refVars.primaryTableLoc)
+    if (primaryTbodLoadedEles) { Array.fromAsync(primaryTbodLoadedEles, async tbod => await modifyDocumentTables(tbod) ) };
+    // tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
     const watchForTablesBeingLoaded = new MutationObserver(() => {
-        tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) }) });
+        tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) })
+    });
     watchForTablesBeingLoaded.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
 
     if (["CaseFile", "Subs"].includes(page.alias)) { return};
-    const watchForPrimaryTableLocExistence = new MutationObserver(async () => {
-        if (gbl.refVars.primaryTableLoc.isConnected) { return };
+    const watchForPrimaryTableLocExistence = new MutationObserver(async () => { // if !primaryTableLoc.isConnected, disconnect other observer, reset primaryTableLoc, restart observer //
+        if (gbl.refVars.primaryTableLoc.isConnected && gbl.refVars.primaryTableLoc.parentElement) { return };
         watchForTablesBeingLoaded.disconnect()
-        // gbl.refVars.primaryTableLoc = await tableLocator(page.primaryTableLoc, mainBody)
         gbl.refVars.primaryTableLoc = tableLocQuery('primaryTableLoc')
-        tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
+        let primaryTbodLoadedEles = tbodLoadedEles(gbl.refVars.primaryTableLoc)
+        if (primaryTbodLoadedEles) { Array.fromAsync(primaryTbodLoadedEles, async tbod => await modifyDocumentTables(tbod) ) };
+        // tbodLoadedEles(gbl.refVars.primaryTableLoc)?.forEach(tbod => { modifyDocumentTables(tbod) });
         watchForTablesBeingLoaded.observe(gbl.refVars.primaryTableLoc, { childList: true, subtree: true });
     });
     watchForPrimaryTableLocExistence.observe(mainBody, { childList: true, subtree: true });
-}();
-!function modifyTablesAsLoadedEFC() {
-    if (!page.hasOwnProperty('efcTableLoc')) { return };
-    gbl.refVars.efcTableLoc ??= tableLocQuery('efcTableLoc')
-    gbl.refVars.efcTableLoc.classList.add('efcTableLoc')
-    if (!gbl.refVars.efcTableLoc) { return };
-    tbodLoadedElesEFC(gbl.refVars.efcTableLoc)?.forEach(tbod => { modifyDocumentTablesEFC(tbod) });
-    const watchForTablesBeingLoaded = new MutationObserver(() => { tbodLoadedElesEFC()?.forEach(tbod => { modifyDocumentTablesEFC(tbod) }) });
-    watchForTablesBeingLoaded.observe(gbl.refVars.efcTableLoc, { childList: true, subtree: true });
-}();
-
+};
+function modifyTablesAsLoadedSecondary() {
+    if (!page.hasOwnProperty('secondaryTableLoc')) { return };
+    gbl.refVars.secondaryTableLoc ??= tableLocQuery('secondaryTableLoc')
+    gbl.refVars.secondaryTableLoc.classList.add('secondaryTableLoc')
+    if (!gbl.refVars.secondaryTableLoc) { return };
+    let secondaryTbodLoadedEles = tbodLoadedElesSecondary(gbl.refVars.secondaryTableLoc)
+    if (secondaryTbodLoadedEles) { Array.fromAsync(secondaryTbodLoadedEles, async tbod => await modifyDocumentTablesSecondary(tbod) ) };
+    // tbodLoadedElesSecondary(gbl.refVars.secondaryTableLoc)?.forEach(tbod => { modifyDocumentTablesSecondary(tbod) });
+    const watchForTablesBeingLoaded = new MutationObserver(() => { tbodLoadedElesSecondary()?.forEach(tbod => { modifyDocumentTablesSecondary(tbod) }) });
+    watchForTablesBeingLoaded.observe(gbl.refVars.secondaryTableLoc, { childList: true, subtree: true });
+};
+modifyTablesAsLoaded().then(() => { modifyTablesAsLoadedSecondary() })
 // \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ MODIFICATIONS END /////////////////////////////////////////////////////////////////////////////////////////////////
 // 〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓
 
@@ -1310,8 +1375,8 @@ function tbodLoadedEles() {
             : Array.from(gbl.refVars.primaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true") // multiple tables: all tbody elements with #id that starts with tbod //
     // return tbodArray;
 };
-function tbodLoadedElesEFC() {
-    return Array.from(gbl.refVars.efcTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
+function tbodLoadedElesSecondary() {
+    return Array.from(gbl.refVars.secondaryTableLoc?.querySelectorAll('tbody[id^=tbod]'))?.filter(ele => ele.getAttribute('isloaded') === "true");
 };
 async function tableLocator(tableQueryStr, tableAncestor = document) {
     let foundQuery = [tableQueryStr].flat().reduce((found, query) => found ?? tableAncestor.querySelector(query) ?? found, null); // for single tables that have multiple locations, which need to be prioritized //
@@ -1347,21 +1412,19 @@ function createNewEle(nodeName, attribObj={}, dataObj={}) {
     Object.entries(dataObj)?.forEach(([dataName, dataValue] = []) => { newEle.dataset[dataName] = dataValue });
     return newEle;
 };
-function createSlider({ textContent="", title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
-    let toggleSlider = createNewEle('div', { classList: ["toggle-slider", extraClasses].join(' '), style: extraStyles })
-    toggleSlider.append(
+function createSlider({ textContent, title, id, checked, fontSize, classes: extraClasses, styles: extraStyles } = {}) {
+    let sliderContainer = createNewEle('div', { classList: ["toggle-slider", extraClasses].flat().join(' '), style: extraStyles }), sliderCheckbox = createNewEle('input', { type: "checkbox", id, checked })
+    sliderContainer.append(
         ...arrangeElements(
-            [createNewEle('span', { textContent }),
-             createNewEle('label', { title, for: id }),
-             [createNewEle('label', { classList: "switch", style: (fontSize && "font-size: " + fontSize + ";") }),
-              [createNewEle('input', { type: "checkbox", id, checked }),
-               createNewEle('span', { classList: "slider round" })
-              ]
+            [createNewEle('label', { title, textContent }),
+             createNewEle('label', { classList: "switch", style: (fontSize && "font-size: " + fontSize + ";") }),
+             [sliderCheckbox,
+              createNewEle('span', { classList: "slider round" })
              ]
             ]
         )
     );
-    return toggleSlider;
+    return { container: sliderContainer, checkbox: sliderCheckbox };
 };
 function replaceChildrenSpan(td, spanProperties) {
     td.replaceChildren( createNewEle('span', spanProperties) )
@@ -1457,25 +1520,23 @@ async function countDocs() { // For those pages where no total doc count exists,
     if (!currentPageLink) { return };
     currentPageLink.textContent = currentPageLink?.textContent + " (" + (docTable.querySelectorAll('tr').length ?? '') + ")"
 };
-function highlightAdd(highlightClassNum, currentTbody) {
-    const trMatched = currentTbody?.getElementsByClassName(highlightClassNum)
+function highlightAdd(highlightClass, currentTbody) {
+    const trMatched = currentTbody?.getElementsByClassName(highlightClass)
     highlightClickCount(trMatched.length)
     Array.from(trMatched, tr => { tr.classList.add('selectedDocs')} );
 };
 function highlightRemove() {
     Array.from(mainBody.querySelectorAll('tr.selectedDocs'), tr => { tr.classList.remove('selectedDocs') });
 };
-function highlightEvent({ highlightClassNum, tdTableRow, tdCheckbox } = {}) {
-    highlightClassNum && tdTableRow.classList.add(highlightClassNum)
+function highlightEvent({ currentTbody, highlightClass, tdTableRow, tdCheckbox } = {}) {
     tdTableRow.addEventListener('click', highlightOnClickEvent);
     tdCheckbox?.addEventListener('click', highlightOnClickEvent);
-    let currentTbody = gbl.refVars.currentTbody
     function highlightOnClickEvent(clickEvent) {
-        if (highlightClassNum === gbl.refVars.highlight.selectedClass && !tdTableRow.className?.includes('s4-itm-selected') && tdTableRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
-        gbl.refVars.highlight.selectedClass = highlightClassNum // sets global variable //
+        if (highlightClass === gbl.refVars.highlight.selectedClass && !tdTableRow.className?.includes('s4-itm-selected') && tdTableRow.className?.includes('selectedDocs')) { return }; // highlighted: yes && selected: no //
+        gbl.refVars.highlight.selectedClass = highlightClass // sets the global variable //
         highlightRemove()
-        if (tdTableRow.className?.includes('s4-itm-selected')) { return highlightClickCount(''); };
-        highlightAdd(highlightClassNum, currentTbody)
+        if (highlightClass === "noHighlight" || tdTableRow.className?.includes('s4-itm-selected')) { return highlightClickCount('') };
+        highlightAdd(highlightClass, currentTbody)
     };
 };
 async function highlightClickCount(rowCount) {
