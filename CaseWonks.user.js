@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.32
+// @version      0.0.33
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -487,17 +487,19 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
         expandoEle.append(ele.querySelector('ul'))
         eleSpan.replaceWith(expandoEle)
     }); // "Join Leave Team DocBox", "Admin" //
-    let mySubsHref = "/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=FilterField1%3DDocBox-FilterValue1%3D" + caseWonksDataSet?.data?.userName
-    let subsLink = locateByHref(gbl.sideNav.subsLink, gbl.sideNav.menu).closest('li')
-    let mySubsLink = createNewEle('li', { classList: "static" });
-    mySubsLink.append( ...arrangeElements(
-        [createNewEle('a', { href: mySubsHref, classList: "ms-core-listMenu-item", }),
-         [createNewEle('span', { textContent: "Manage My Subs" })
-         ],
-        ]));
-    locateByHref(gbl.sideNav.taxonomyList, gbl.sideNav.menu).closest('li')
-        .insertAdjacentElement('afterend', subsLink )
-        .insertAdjacentElement('afterend', mySubsLink )
+    let subsLink = locateByHref(gbl.sideNav.subsLink, gbl.sideNav.menu)?.closest('li')
+    if (subsLink) {
+        let mySubsLink = createNewEle('li', { classList: "static" });
+        let mySubsHref = "/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=FilterField1%3DDocBox-FilterValue1%3D" + caseWonksDataSet?.data?.userName
+        mySubsLink.append( ...arrangeElements(
+            [createNewEle('a', { href: mySubsHref, classList: "ms-core-listMenu-item", }),
+             [createNewEle('span', { textContent: "Manage My Subs" })
+             ],
+            ]));
+        locateByHref(gbl.sideNav.taxonomyList, gbl.sideNav.menu).closest('li')
+            .insertAdjacentElement('afterend', subsLink )
+            .insertAdjacentElement('afterend', mySubsLink )
+    };
     gbl.sideNav.menu.append( ...Array.from(gbl.sideNav.menu.querySelectorAll('[href^="https://nct1170.zendesk.com"]'), ele => ele.closest('li') ) );
     Array.from(gbl.sideNav.menu.querySelectorAll('a'), ele => { ele.target = "_blank" })
 }();
