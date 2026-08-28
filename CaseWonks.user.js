@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.31
+// @version      0.0.32
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -361,6 +361,17 @@ const gbl = {
         caseHistory: createNewEle('datalist', { id: "caseHistory", style: "visibility: hidden;" }),
         caseWonksVersion: createNewEle('div', { id: "caseWonksVersion", textContent: GM_info.script.name + ' v' + GM_info.script.version, style: "cursor: pointer;", classList: "wonks" }),
         clickedCount: createNewEle('span', { id: "clickedCount", classList: "wonks" }), clickedCountCont: createNewEle('span', { id: "clickedCountCont" } ), docCountText: createNewEle('span', { textContent: "Doc Count: " }),
+        mySubsLink: createNewEle('li'),
+    },
+    sideNav: {
+        menu: mainBody?.querySelector('#DeltaPlaceHolderLeftNavBar #zz10_RootAspMenu'),
+        taxonomyList: "https://nctcentralstlouis.caseworkscloud.com/DocType/Forms/View%20By%20Financial%20Services%20Edition.aspx",
+        subsLink: "/Lists/Subscription/Subscriptions.aspx",
+        moveToBottom: {
+            newCwLink: "https://nct1170.zendesk.com/hc/en-us/categories/38940899237268-New-in-CaseWorks",
+            cwKnowBase: "https://nct1170.zendesk.com/hc/en-us",
+            cwVideos: "https://nct1170.zendesk.com/hc/en-us/categories/38472620821268-Training-Videos",
+        },
     },
     refVars: {
         currentTbody: undefined, primaryTableLoc: undefined, secondaryTableLoc: undefined,
@@ -410,6 +421,14 @@ gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
         switch: "& > label.switch { font-size: 12px; } } .switch { position: relative; display: inline-block; width: 3.5em; height: 1.55em; margin: 0 !important; } }"
     }).join(' ');
     const toggleSliderCSS = addCSSStyleSheet(toggleSliderCSSRules)
+    const sideNavCSSRules = Object.values({
+        start: "details.sideNavExpando { cursor: pointer; ",
+        expandoUL: " & ul { padding-left: 10px !important; }",
+        expandoSummaryText: "& summary { padding: 5px 10px 5px 20px; text-wrap-mode: nowrap; }",
+        // expandoSubList: "& ul li a { padding: 5px 1px 5px 15px; }",
+        end: "}"
+    }).join(' ');
+    const sideNavCSS = addCSSStyleSheet(sideNavCSSRules)
     !function wonksHover() {
         const wonksHoverCSS = addCSSStyleSheet()
         gbl.eles.caseWonksVersion.addEventListener('mouseenter', () => { wonksHoverCSS.replaceSync('.wonks { border: 1px solid red; }') });
@@ -454,6 +473,34 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     };
     return splitCaseData;
 })();
+!function sideNavRearrange() {
+    if (!gbl.sideNav.menu) { return };
+    const locateByHref = (href, rootEle=document) => rootEle.querySelector('[href="' + href + '"]')
+    const createExpando = ({ textContent, classList="", style="" }) => {
+        let outerExpando = createNewEle('details', { classList })
+        outerExpando.append( createNewEle('summary', { textContent }) )
+        return outerExpando;
+    };
+    Array.from(gbl.sideNav.menu.querySelectorAll('li:not(:has(>a))'), ele => {
+        let eleSpan = ele.querySelector('span')
+        let expandoEle = createExpando({ textContent: eleSpan.querySelector('.menu-item-text').textContent, classList: "sideNavExpando" })
+        expandoEle.append(ele.querySelector('ul'))
+        eleSpan.replaceWith(expandoEle)
+    }); // "Join Leave Team DocBox", "Admin" //
+    let mySubsHref = "/Lists/Subscription/Subscriptions.aspx#InplviewHasha58096de-cccd-44dd-9312-4b41ef7cdffc=FilterField1%3DDocBox-FilterValue1%3D" + caseWonksDataSet?.data?.userName
+    let subsLink = locateByHref(gbl.sideNav.subsLink, gbl.sideNav.menu).closest('li')
+    let mySubsLink = createNewEle('li', { classList: "static" });
+    mySubsLink.append( ...arrangeElements(
+        [createNewEle('a', { href: mySubsHref, classList: "ms-core-listMenu-item", }),
+         [createNewEle('span', { textContent: "Manage My Subs" })
+         ],
+        ]));
+    locateByHref(gbl.sideNav.taxonomyList, gbl.sideNav.menu).closest('li')
+        .insertAdjacentElement('afterend', subsLink )
+        .insertAdjacentElement('afterend', mySubsLink )
+    gbl.sideNav.menu.append( ...Array.from(gbl.sideNav.menu.querySelectorAll('[href^="https://nct1170.zendesk.com"]'), ele => ele.closest('li') ) );
+    Array.from(gbl.sideNav.menu.querySelectorAll('a'), ele => { ele.target = "_blank" })
+}();
 !function addCustomNavBar() {
     if (!ribbon) { return };
     mainBody.insertAdjacentElement( 'afterbegin', gbl.eles.navContainer )
@@ -1425,6 +1472,13 @@ function createSlider({ textContent, title, id, checked, fontSize, classes: extr
         )
     );
     return { container: sliderContainer, checkbox: sliderCheckbox };
+};
+function doWrap({ ele, type='div', classList='' } = {}) {
+    ele = ele.nodeName === "#text" ? ele : sanitize.query(ele)
+    const wrappingElement = createNewEle(type, { classList });
+    ele.replaceWith(wrappingElement);
+    wrappingElement.append(ele);
+    return wrappingElement;
 };
 function replaceChildrenSpan(td, spanProperties) {
     td.replaceChildren( createNewEle('span', spanProperties) )
