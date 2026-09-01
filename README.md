@@ -9,7 +9,7 @@ Q: I work in the ___ Edition, will it work for me?
 A: If it doesn't, I'll do my best to make it work.
   
 Q: What does it do?  
-A: Mostly changes words and adds some links. Eventually more things.
+A: Mostly changes words and adds some links. [Plus some other things](https://github.com/MECH2-at-Github/CaseWorks/wiki)
 <img width="1200" alt="CaseWorks Home Page" src="https://github.com/user-attachments/assets/bcab583f-127e-4e33-83c7-420bd629758e" />
 
 
