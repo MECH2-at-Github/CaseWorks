@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.35
+// @version      0.0.36
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -472,7 +472,7 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     let splitCaseData = { caseNum: undefined, caseName: undefined };
     function getCaseFileDataDetails() {
         if (!caseIdNameEle) { return };
-        if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: "Not Found&sol;No Data" } }
+        if ( caseIdNameEle.textContent.includes("Client Detail Not Found In Repository For Case ") ) { return { caseNum: caseIdNameEle.textContent.split("Client Detail Not Found In Repository For Case ")[1], caseName: "Not Found or No Data" } }
         switch(editionCode) {
             case "fse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseNum>[0-9 ]+) (?<caseName>[A-Z'\-, ]+)/i).groups;
             case "mse": return caseIdNameEle.textContent.match(/(?<title>[A-Z ]+:) (?<caseName>[A-Z'\-, ]+) \((?<caseNum>[0-9]{8})\)/i).groups;
@@ -485,7 +485,7 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     if (!splitCaseData.caseNum) { return splitCaseData };
     if (["fse", "mse", ].includes(editionCode)) {
         splitCaseData.caseNum = parseInt(splitCaseData.caseNum, 10)
-        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;', title: "Left click: Copy Case Number.\nRight click: Open Document Discovery page." }),
+        let caseIdNameEleReplacement = createNewEle('h1', { style: 'display: flex; gap: 10px;', classList: "wonks", title: "Left click: Copy Case Number.\nRight click: Open Document Discovery page." }),
             caseNumEle = createNewEle('div', { textContent: splitCaseData.caseNum }), caseNameEle = createNewEle('div', { textContent: splitCaseData.caseName })
         splitCaseData.caseName !== "Not Found&sol;No Data"
             ? caseIdNameEleReplacement.append( createNewEle('div', { textContent: splitCaseData.title }), caseNumEle, caseNameEle )
@@ -1019,7 +1019,7 @@ function Subs() {
                 alreadySubbed.style.backgroundColor = "yellow"
                 localStorage.removeItem('CaseWonks.subAssist')
             } else {
-                mainBody.getElementById('idHomePageNewItem')?.click()
+                mainBody.querySelector('#idHomePageNewItem')?.click()
             };
         }();
         const rowMap = new Map()
