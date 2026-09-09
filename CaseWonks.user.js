@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.36
+// @version      0.0.37
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -387,6 +387,17 @@ const gbl = {
 gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
 
 !function addScriptSpecificCSSRules() {
+    const wonksScriptWideCSSRules = Object.values({
+        darkReaderOverrides: ":root { --darkreader-background-add8e624: #add8e624; --darkreader-border-808080cc: #808080cc; --darkreader-border-ffffff: #ffffff; }",
+        clickedCountCont: "#clickedCountCont { position: absolute; right: 15%; bottom: 1px; font-size: 10pt; color: light-dark(#222, #efefef) !important; }",
+        selectedDocs: ":is(.selectedCaseNumDocs, .selectedDocs):not(.s4-itm-selected) { background-color: light-dark(#add8e63d, var(--darkreader-background-add8e624)) !important; }",
+        tdBorderTop: ".tdBorderTop { & > td { border-top: 1px solid var(--darkreader-border-808080cc) !important; } }",
+        pdfSelected: '.pdfSelected #Ribbon\\.Documents\\.NCT\\.Document\\.Delete-Large > span { position: relative; color: rgba(255, 0, 0); & span:has(img)::after { z-index: 5; content: ""; position: absolute; background-color: rgba(255, 0, 0, 0.35); pointer-events: none; width: 100%; height: 100%; } }', // red when PDF selected //
+        hidden: ".hidden { display: none !important; }",
+        popupWindow: "div.ms-dlgContent, div.ms-dlgBorder { height: auto !important; }",
+        bodyIframe: "body > iframe { display: none; }",
+    }).join(' ');
+    const wonksScriptWideCSS = addCSSStyleSheet(wonksScriptWideCSSRules);
     const wonksNavContainerCSSRules = Object.values({
         scope: "@scope (#wonksNavContainer) { :scope {",
         navContainer: "line-height: 26px; display: flex; gap: 20px; align-items: center; position: fixed; left: 250px; top: 4px; z-index: 990;",
@@ -398,16 +409,6 @@ gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
         closure: "} }",
     }).join(' ');
     const wonksNavContainerCSS = addCSSStyleSheet(wonksNavContainerCSSRules)
-    const wonksScriptWideCSSRules = Object.values({
-        darkReaderOverrides: ":root { --darkreader-background-add8e624: #add8e624; --darkreader-border-808080cc: #808080cc; --darkreader-border-ffffff: #ffffff; }",
-        clickedCountCont: "#clickedCountCont { position: absolute; right: 15%; bottom: 1px; font-size: 10pt; color: light-dark(#222, #efefef) !important; }",
-        selectedDocs: ":is(.selectedCaseNumDocs, .selectedDocs):not(.s4-itm-selected) { background-color: light-dark(#add8e63d, var(--darkreader-background-add8e624)) !important; }",
-        tdBorderTop: ".tdBorderTop { & > td { border-top: 1px solid var(--darkreader-border-808080cc) !important; } }",
-        pdfSelected: '.pdfSelected #Ribbon\\.Documents\\.NCT\\.Document\\.Delete-Large > span { position: relative; color: rgba(255, 0, 0); & span:has(img)::after { z-index: 5; content: ""; position: absolute; background-color: rgba(255, 0, 0, 0.35); pointer-events: none; width: 100%; height: 100%; } }',
-        hidden: ".hidden { display: none !important; }",
-        popupWindow: "div.ms-dlgContent, div.ms-dlgBorder { height: auto !important; }",
-    }).join(' ');
-    const wonksScriptWideCSS = addCSSStyleSheet(wonksScriptWideCSSRules);
     const snackBarCSSRules = Object.values({
         scope: "@scope (#snackBarDiv) { :scope {",
         main: "opacity: 0; background-color: #333; color: #fff; font-size: x-large; text-align: center; border: solid 5px #fff; border-radius: 6px; position: fixed; z-index: 25; width: max-content; padding: 2rem 5rem; left: 50%; right: 50%; translate: -50% 0; bottom: 30px; pointer-events: none;",
@@ -671,8 +672,9 @@ const caseFileCaseData = (() => { // used for case history and fixing page title
     }(); //======================== Case_History | New_Tab_Case_Number_Field Section_End ===================================//
 }();
 const popupWindow = {
-    popupEles: { popupTLO: undefined, popupIframe: undefined, popupIframeContainer: undefined, popupRootNode: undefined, titleSpanFirstWord: undefined, },
-    // popupEles: { popupTLO: undefined, popupIframe: undefined, popupIframeContainer: undefined, popupTitleField: undefined, popupRootNode: undefined, editDropDown: undefined, popupDocBox: undefined, editFileToEFC: undefined, editReviewed: undefined, editP: undefined, titleSpanFirstWord: undefined, },
+    iterationCount: 0,
+    popupEles: { popupTLO: undefined, popupIframe: undefined, popupIframeContainer: undefined, popupRootNode: undefined, titleSpanFirstWordLowerCase: undefined, },
+    // popupEles: { popupTLO: undefined, popupIframe: undefined, popupIframeContainer: undefined, popupTitleField: undefined, popupRootNode: undefined, editDropDown: undefined, popupDocBox: undefined, editFileToEFC: undefined, editReviewed: undefined, editP: undefined, titleSpanFirstWordLowerCase: undefined, },
     watchForWindow() {
         verbose("watchForWindow: watching for new popup windows")
         let popupEles = this.popupEles
@@ -689,27 +691,49 @@ const popupWindow = {
     watchWindow() {
         let popupEles = this.popupEles
         const popupObserver = new MutationObserver(() => {
-            verbose(1)
-            popupEles.titleSpanFirstWord = popupEles.popupTLO.querySelector('div.ms-dlgTitle h1#dialogTitleSpan')?.textContent?.split(" ")[0]
-            verbose(popupEles.titleSpanFirstWord)
-            if (popupEles.titleSpanFirstWord === "Working") { return };
-            popupEles.popupRootNode = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')?.querySelector('iframe')?.contentDocument // #document
-            popupEles.popupTLO.focus()
-            if (popupEles.popupRootNode) {
-                popupEles.popupIframeHTML = popupEles.popupRootNode.documentElement // html level //
-                popupEles.popupIframeContainer = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')
-                popupEles.popupIframe = popupEles.popupIframeContainer.querySelector('iframe')
-                popupEles.popupRootNode.querySelector('head').append( createNewEle('style', { textContent: "tr > div.wonks { height: 29px; line-height: 29px; } span.ms-metadata { display: none !important; } #s4-workspace { height: auto !important; }" }) );
-                popupEles.popupIframeContainer.append(createNewEle('style', { textContent: "@scope { iframe { height: " + popupEles.popupIframeHTML.offsetHeight + "px !important; } }" }))
-                popupEles.popupDocBox = popupEles.popupRootNode.querySelector('select[title="DocBox"]')
-                popupEles.popupMaxis = popupEles.popupRootNode.querySelector('input[title="MAXIS"]')
-                popupEles.popupTitleField = popupEles.popupRootNode.querySelector('input:is([title="Title Required Field"],[title="DocType Required Field"])')
-            };
+            // popupEles.titleSpanFirstWordLowerCase = popupEles.popupTLO.querySelector('div.ms-dlgTitle h1#dialogTitleSpan')?.textContent?.split(" ")[0]
+            // verbose(popupEles.titleSpanFirstWordLowerCase)
+            // if (popupEles.titleSpanFirstWordLowerCase === "Working") { popupEles.titleSpanFirstWordLowerCase = undefined; return };
+            // popupEles.popupRootNode = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')?.querySelector('iframe')?.contentDocument // #document
+            // popupEles.popupTLO.focus()
+            // if (popupEles.popupRootNode) {
+            //     popupEles.popupIframeHTML = popupEles.popupRootNode.documentElement // html level //
+            //     popupEles.popupIframeContainer = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')
+            //     popupEles.popupIframe = popupEles.popupIframeContainer.querySelector('iframe')
+            //     popupEles.popupDocBox = popupEles.popupRootNode.querySelector('select[title="DocBox"]')
+            //     popupEles.popupMaxis = popupEles.popupRootNode.querySelector('input[title="MAXIS"]')
+            //     popupEles.popupTitleField = popupEles.popupRootNode.querySelector('input:is([title="Title Required Field"],[title="DocType Required Field"])')
+            // };
+            if (!this.watchWindowFunc()) { return };
             popupObserver.disconnect()
-            this.popupWindowCategory()
-            this.watchForWindowRemoval()
+            // this.popupWindowCategory()
+            // this.watchForWindowRemoval()
         });
-        popupObserver.observe(popupEles.popupTLO, { childList: true, subtree: true });
+        // if (this.watchWindowFunc()) {
+        //     // this.popupWindowCategory()
+        //     // this.watchForWindowRemoval()
+        //     return;
+        // };
+        if (!this.watchWindowFunc()) { popupObserver.observe(popupEles.popupTLO, { childList: true, subtree: true }); };
+        // popupObserver.observe(popupEles.popupTLO, { childList: true, subtree: true });
+    },
+    watchWindowFunc() {
+        let popupEles = this.popupEles
+        popupEles.titleSpanFirstWordLowerCase = popupEles.popupTLO.querySelector('div.ms-dlgTitle h1#dialogTitleSpan')?.textContent?.split(" ")[0].trim().toLowerCase()
+        if (popupEles.titleSpanFirstWordLowerCase === "working") { popupEles.titleSpanFirstWordLowerCase = undefined; return 0 };
+        popupEles.popupRootNode = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')?.querySelector('iframe')?.contentDocument // #document
+        popupEles.popupTLO.focus()
+        if (popupEles.popupRootNode) {
+            popupEles.popupIframeHTML = popupEles.popupRootNode.documentElement // html level //
+            popupEles.popupIframeContainer = popupEles.popupTLO.querySelector('.ms-dlgFrameContainer')
+            popupEles.popupIframe = popupEles.popupIframeContainer.querySelector('iframe')
+            popupEles.popupDocBox = popupEles.popupRootNode.querySelector('select[title="DocBox"]')
+            popupEles.popupMaxis = popupEles.popupRootNode.querySelector('input[title="MAXIS"]')
+            popupEles.popupTitleField = popupEles.popupRootNode.querySelector('input:is([title="Title Required Field"],[title="DocType Required Field"])')
+        };
+        this.popupWindowCategory()
+        this.watchForWindowRemoval()
+        return 1;
     },
     watchForWindowRemoval() {
         let popupEles = this.popupEles
@@ -721,12 +745,20 @@ const popupWindow = {
     },
     doWindowRemovalCheck() {
         if (mainBody.contains(this.popupEles.popupIframe)) { return 0 };
+        // if (mainBody.contains(this.popupEles.popupIframe) && this.popupEles.popupRootNode.documentURI !== "about:blank") { return 0 };
         if (!this.popupEles.popupTLO || !this.popupEles.popupTLO.isConnected) {
+        // if (!this.popupEles.popupTLO || !this.popupEles.popupTLO.isConnected || this.popupEles.popupRootNode.documentURI === "about:blank") {
             verbose("watchForWindowRemoval: popupTLO removed");
             this.resetBaseValues(true)
             this.watchForWindow()
+        // } else if (this.popupEles.popupRootNode.documentURI === "about:blank") {
+        //     verbose("watchForWindowRemoval: popupRootNode.documentURI = 'about:blank'. Returning to watchWindow");
+        //     if (this.iterationCount++ >= 2) { return 0 }
+        //     this.resetBaseValues()
+        //     this.watchWindow()
         } else {
             verbose("watchForWindowRemoval: popupRootNode removed. Returning to watchWindow");
+            if (this.iterationCount++ >= 2) { return 0 }
             this.resetBaseValues()
             this.watchWindow()
         };
@@ -738,16 +770,18 @@ const popupWindow = {
         else { Object.keys(popupEles).forEach(key => { if (key === "popupTLO") { return }; this.popupEles[key] = undefined }) }
     },
     popupWindowCategory() {
-        switch(this.popupEles.titleSpanFirstWord) {
-            case "Connect": this.connectYourSMI(); break;
-            case "Document": this.editProperties(); break;
-            case "Subscription": this.subscriptionWindow(); break;
-            case "Version": break;
+        switch(this.popupEles.titleSpanFirstWordLowerCase) {
+            case "connect": this.connectYourSMI(); break;
+            case "document": this.editProperties(); break;
+            case "subscription": this.subscriptionWindow(); break;
+            case "version": break;
             default: break;
         };
     },
     editProperties() {
         let popupEles = this.popupEles
+        popupEles.popupRootNode.querySelector('head').append( createNewEle('style', { textContent: "tr > div.wonks { height: 29px; line-height: 29px; } span.ms-metadata { display: none !important; } #s4-workspace { overflow-y: scroll; }" }) );
+        popupEles.popupIframeContainer.append(createNewEle('style', { textContent: "@scope { iframe { height: " + popupEles.popupIframeHTML.offsetHeight + "px !important; max-height: 93vh; } }" }))
         popupEles.editFileToEFC = popupEles.popupRootNode.querySelector('select[title="File to EFC"]')
         popupEles.editReviewed = popupEles.popupRootNode.querySelector('select[title="Reviewed"]')
         popupEles.editP = popupEles.popupRootNode.querySelector('input[title="P"]')
@@ -799,9 +833,20 @@ const popupWindow = {
         }();
     },
     connectYourSMI() {
-        // let popupEles = this.popupEles
-        verbose("connectYourSMI: What about SMI? SMI's ME!")
-        this.popupEles.popupRootNode.querySelector('#ctl00_PlaceHolderMain_txtSMIUsername').focus()
+        return; // something/everything is getting replaced during this event, and I can't figure out where/when to reset //
+        let popupEles = this.popupEles
+        popupEles.popupIframe.addEventListener('load', loadEvent => { verbose(loadEvent?.destination?.url)} )
+        const smiObserver = new MutationObserver(() => {
+            // let smiForm = popupEles.popupRootNode?.querySelector('form')
+            // if (!smiForm) { return };
+            let userNameField = popupEles.popupRootNode?.querySelector('#ctl00_PlaceHolderMain_txtSMIUsername')
+            if (!userNameField) { return };
+            userNameField?.select()
+            smiObserver.disconnect()
+        });
+        smiObserver.observe(popupEles.popupIframeHTML.querySelector('body'), { childList: true, subtree: true });
+        // verbose(popupEles.popupIframeHTML)
+        // verbose(popupEles.popupRootNode)
     },
     subscriptionWindow() {
         let popupEles = this.popupEles
@@ -1624,8 +1669,8 @@ function visualIndicatorIfPdfSelected() {
         default: ribbon.classList.add('pdfSelected'); break;
     };
 };
-function verbose() { console.info( ...arguments, "  (Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
-function verbWarn() { console.warn( ...arguments, "  (VerbWarn line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
+function verbose() { console.info( ...arguments, "__(Verbose line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
+function verbWarn() { console.warn( ...arguments, "__(VerbWarn line: " + (Number((new Error).stack.split('\n')[2].split(':').toReversed()[1])-1) + ")" ) }; // Edge version //
 function copy(text) { if (typeof text !== 'string') { return }; navigator.clipboard.writeText(text) };
 function snackBar(sbText, title="Copied!", doCopy=true) {
     if (!sbText) { return };
