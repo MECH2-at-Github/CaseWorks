@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.37
+// @version      0.0.38
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -77,7 +77,6 @@ const dateFuncs = {
     },
 };
 const doClick = (element, options={bubbles:true}) => { element = sanitize.query(element); element?.dispatchEvent(new MouseEvent('click', options)) };
-// const doClick = (element, bubbles=true) => { element = sanitize.query(element); element?.dispatchEvent(new MouseEvent('click', { bubbles })) };
 
 const caseWonksDataSet = {
     data: { ...sanitize.json( localStorage.getItem('caseWonks.data') ) } ?? {}, // set by info found on pages //
@@ -467,6 +466,36 @@ gbl.eles.clickedCountCont.append(gbl.eles.docCountText, gbl.eles.clickedCount);
     // }();
 }();
 
+!function globalEvents() {
+    !function pdfPreviewClosers() {
+        mainBody.addEventListener('keydown', keydownEvent => {
+            if (keydownEvent.key !== "Escape") { return };
+            let fullScreenPreview = document.querySelector('body > div[style^="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%;"]')
+            fullScreenPreview?.querySelector('button')?.click()
+            let partialScreenPreview = document.querySelector('body > div[style^="position: fixed; bottom: 20px; right: 20px;"]')
+            partialScreenPreview?.querySelector('div:has(img)')?.click()
+        });
+    }();
+    !function fullScreenPdfScroll() {
+        const pdfPreviewObserver = new MutationObserver(() => {
+            let fullScreenPreview = Array.from(mainBody.children).find(ele => ele.style?.position === "fixed" && ele.style?.top === "0px")
+            if (!fullScreenPreview) { return };
+            let pageUp = fullScreenPreview.querySelectorAll('button')[1]
+            let pageDown = fullScreenPreview.querySelectorAll('button')[2]
+            let scrollTime = Date.now()
+            fullScreenPreview.querySelector('canvas').addEventListener('wheel', wheelEvent => {
+                wheelEvent.preventDefault(); wheelEvent.stopImmediatePropagation(); wheelEvent.stopPropagation();
+                let newScrollTime = Date.now()
+                if (newScrollTime - scrollTime < 150) { return };
+                scrollTime = newScrollTime
+                if (wheelEvent.deltaY > 0) { pageDown?.click() }
+                else if (wheelEvent.deltaY < 0) { pageUp?.click() };
+            });
+        });
+        pdfPreviewObserver.observe(mainBody, { childList: true });
+    }();
+}();
+
 const caseFileCaseData = (() => { // used for case history and fixing page title // fse, mse correct //
     if (page.alias !== "CaseFile") { return };
     let caseIdNameEle = mainBody.querySelector('h1:not(#pageTitle)')
@@ -851,7 +880,7 @@ const popupWindow = {
     subscriptionWindow() {
         let popupEles = this.popupEles
         popupEles.popupTitleField = popupEles.popupRootNode.querySelector('[title="Title Required Field"]')
-        if (gbl.refVars.wonksSubAssistLS && window.location.hash.includes("DocBox-FilterValue")) {
+        if (gbl.refVars.wonksSubAssistLS && window.location.hash.includes("DocBox-FilterValue") && !popupEles.popupTitleField.value) {
             let addSubContainer = createNewEle('td', { classList: "wonks" }), clearSubData = createNewEle('button', { type: "Button", textContent: "Clear Sub Data", id: "clearSubData", classList: "wonks-button" }),
                 addSubEnterDataButton = createNewEle('button', { type: "Button", textContent: "Sub Assist", id: "subButton", classList: "wonks-button" });
             addSubContainer.append(addSubEnterDataButton)
