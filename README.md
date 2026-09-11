@@ -31,4 +31,4 @@ Tip: Right click links and then click "Open link in new tab". Tabs can be closed
 4. Open the [style install page](https://userstyles.world/style/27371/default-slug) and click the [ Install ] button to the bottom right of the image.  
 On the next page, click the [ Install Style ] button in the upper left. <img width="600" alt="style sheet install" src="https://github.com/user-attachments/assets/ed4dd0cb-e03d-4315-8b43-5b5fc81ef9fc" />
 
-Done!
+Done! Close any tabs that were opened as part of the installation process. And don't forget to check out the [wiki page](https://github.com/MECH2-at-Github/CaseWorks/wiki) to learn about CaseWonks' features.
