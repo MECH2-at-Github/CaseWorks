@@ -1,3 +1,5 @@
+Welcome to the repository for CaseWonks, a user script designed for CaseWorks. If you find a bug with the script, either email me or submit it as an issue.
+
 # FAQs
 Q: Is it stable?  
 A: As stable as anyone working in CaseWorks.  
