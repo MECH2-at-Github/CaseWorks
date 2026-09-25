@@ -1,6 +1,12 @@
 Welcome to the repository for CaseWonks, a user script designed for CaseWorks. If you find a bug with the script, either email me or submit it as an issue.
 
 # FAQs
+Q: Is this sanctioned by NCT?  
+A: It's neither sanctioned nor acknowledged by them. NCT is welcome to implement any enhancements added to this script, but due to limited resources this is unlikely.  
+  
+Q: Is this sanctioned by SLC?  
+A: It's not sanctioned by SLC IT, but it is acknowledged by my supervisor. Everyone is welcome to use the script with this understanding.  
+  
 Q: Is it stable?  
 A: As stable as anyone working in CaseWorks.  
   
@@ -12,7 +18,7 @@ A: If it doesn't, I'll do my best to make it work.
   
 Q: What does it do?  
 A: Mostly changes words and adds some links. [Plus some other things](https://github.com/MECH2-at-Github/CaseWorks/wiki)
-<img width="1200" alt="CaseWorks Home Page" src="https://github.com/user-attachments/assets/bcab583f-127e-4e33-83c7-420bd629758e" />
+<img width="1200" alt="CaseWorks Hope Page" src="https://github.com/user-attachments/assets/e4463b67-2f94-4cfc-8d74-2c3c06c5e088" />
 
 
 # Installation
