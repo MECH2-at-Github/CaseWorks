@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CaseWonks
 // @namespace    http://tampermonkey.net/
-// @version      0.0.38
+// @version      0.0.39
 // @description  Make CaseWorks less miserable to use.
 // @author       McCormickJ
 // @match        https://*.caseworkscloud.com/*
@@ -301,6 +301,7 @@ const shortNoteSwaps = { // Assume the space after an email address is not a whi
 };
 
 const taxonomySwaps = new Map([
+    ["00 - Marked for Deletion", "Marked for Deletion"],
     [ "1.1 IM - Enumeration-Identity", "1.1\xA0Identity" ],
     [ "1.2 IM - Confidential-Medical", "1.2\xA0Conf.\xA0Med." ],
     [ "1.21 IM - Substance Use Disorder", "1.21 Subs\xA0Use\xA0Dis" ],
@@ -1483,7 +1484,8 @@ function modifyCaseNum(currentTbody, tdCaseNum, tdCheckbox, tdDocBox) {
 };
 function modifyTaxonomy(taxonomy) {
     if (!taxonomy || !taxonomy.textContent) { return };
-    replaceChildrenSpan(taxonomy, { title: taxonomy.textContent, textContent: taxonomySwaps.get(taxonomy.textContent) })
+    let newTaxonomy = taxonomySwaps.get(taxonomy.textContent) ?? taxonomy.textContent
+    replaceChildrenSpan(taxonomy, { title: taxonomy.textContent, textContent: newTaxonomy });
 };
 function modifyDate(originalDate) {
     if (!originalDate || !originalDate.textContent) { return };
