@@ -23,7 +23,7 @@ A:&ensp;I don't like to be miserable while I work.
   
 Q:&ensp;I work in the ___ Edition, will it work for me?  
 A:&ensp;If it doesn't, I'll do my best to make it work.  
-&emsp;If a table's text isn't shortened, the most likely point of failure is a mismatch of table columns.
+&emsp;If the script fails to work on a page, the most likely point of failure is a mismatch of table columns.
 <img width="1200" alt="CaseWorks Hope Page" src="https://github.com/user-attachments/assets/e4463b67-2f94-4cfc-8d74-2c3c06c5e088" />
 
 
